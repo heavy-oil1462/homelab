@@ -93,3 +93,29 @@ paths, which catches option and type errors without building full systems.
 
 `nix run .#deploy` starts a small fzf picker over `scripts/deploy/*.sh` in
 your config repo.
+
+## Agent skills (Claude Code plugin)
+
+This repo doubles as a Claude Code plugin shipping read-only observability
+skills for the stack it deploys: host health from node_exporter
+(host-metrics), journal logs from Loki (service-logs), and Home Assistant
+entity state from the Prometheus exporter (ha-state). Install per project:
+
+```
+claude plugin marketplace add heavy-oil1462/homelab
+claude plugin install homelab@homelab
+```
+
+Endpoints resolve from HOMELAB_PROM_URL / HOMELAB_LOKI_URL environment
+variables, else a `.claude/homelab-endpoints.json` found upward from the
+current directory (commit one in your private config repo), else
+`~/.claude/homelab-endpoints.json`:
+
+```json
+{
+  "prom_url": "https://metrics.home.example.com",
+  "loki_url": "https://logs.home.example.com"
+}
+```
+
+See `skills/README.md` for layout and conventions.

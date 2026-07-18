@@ -1,0 +1,14 @@
+{
+  "name": "homelab",
+  "owner": {
+    "name": "heavy-oil1462",
+    "url": "https://github.com/heavy-oil1462"
+  },
+  "plugins": [
+    {
+      "name": "homelab",
+      "source": "./",
+      "description": "Read-only observability skills for the homelab stack: host health from node_exporter, service logs from Loki, Home Assistant entity state from the Prometheus exporter."
+    }
+  ]
+}
