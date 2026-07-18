@@ -1,0 +1,12 @@
+// Example waybar config for the desktop-hyprland module.
+{
+  "layer": "top",
+  "position": "top",
+  "modules-left": ["hyprland/workspaces"],
+  "modules-center": ["clock"],
+  "modules-right": ["pulseaudio", "network", "battery", "tray"],
+  "clock": { "format": "{:%H:%M}" },
+  "battery": { "format": "{capacity}% {icon}", "format-icons": ["", "", "", "", ""] },
+  "network": { "format-wifi": "{essid}", "format-ethernet": "eth" },
+  "pulseaudio": { "format": "{volume}%" }
+}

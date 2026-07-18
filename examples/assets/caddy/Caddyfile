@@ -1,0 +1,50 @@
+# Example Caddyfile for the reverse-proxy module. __DOMAIN__ is replaced with
+# homelab.domain at build time. Certificates come from the acme module and are
+# mounted at /certs. Upstream container names resolve over the podman network;
+# 192.0.2.10 stands in for a LAN device outside podman (RFC 5737 range).
+{
+	auto_https off
+}
+
+(site_tls) {
+	tls /certs/fullchain.pem /certs/key.pem
+}
+
+start.__DOMAIN__:443 {
+	import site_tls
+	reverse_proxy homepage:3000
+}
+
+vault.__DOMAIN__:443 {
+	import site_tls
+	reverse_proxy vaultwarden:80
+}
+
+status.__DOMAIN__:443 {
+	import site_tls
+	reverse_proxy grafana:3000
+}
+
+metrics.__DOMAIN__:443 {
+	import site_tls
+	reverse_proxy prometheus:9090
+}
+
+logs.__DOMAIN__:443 {
+	import site_tls
+	reverse_proxy loki:3100
+}
+
+# A device on the LAN, outside podman, by IP.
+nas.__DOMAIN__:443 {
+	import site_tls
+	reverse_proxy 192.0.2.10:5000
+}
+
+# Everything else gets the static 404 page.
+*.__DOMAIN__:443, __DOMAIN__:443 {
+	import site_tls
+	rewrite * /404.html
+	root * /var/www
+	file_server
+}

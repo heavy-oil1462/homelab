@@ -1,0 +1,17 @@
+# Example Home Assistant configuration for the homeassistant module.
+# __DOMAIN__ is replaced with homelab.domain at build time. Secrets come from
+# /var/lib/secrets/homeassistant-secrets.yaml, mounted as secrets.yaml.
+default_config:
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    # The reverse proxy as seen by Home Assistant. With host networking and a
+    # podman reverse proxy this is the podman bridge gateway.
+    - 192.0.2.1
+
+homeassistant:
+  external_url: https://smart.__DOMAIN__

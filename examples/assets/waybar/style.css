@@ -1,0 +1,10 @@
+/* Example waybar style. */
+* {
+  font-family: "JetBrainsMono Nerd Font", monospace;
+  font-size: 13px;
+}
+
+window#waybar {
+  background: rgba(20, 20, 25, 0.85);
+  color: #e0e0e0;
+}

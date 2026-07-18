@@ -1,0 +1,5 @@
+# Example homepage settings. Mounted verbatim (not templated).
+title: Homelab
+theme: dark
+color: slate
+headerStyle: clean

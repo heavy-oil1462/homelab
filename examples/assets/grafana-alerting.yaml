@@ -1,0 +1,4 @@
+# Example Grafana alerting provisioning file for the observability module.
+# Add contact points and alert rules here; an empty apiVersion file is valid
+# and provisions nothing.
+apiVersion: 1

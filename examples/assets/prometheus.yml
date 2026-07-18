@@ -1,0 +1,25 @@
+# Example Prometheus config for the observability module. Targets use
+# RFC 5737 documentation addresses; replace them with your hosts' tailnet IPs
+# or names. node_exporter comes from the observability-agent module (port 9100).
+global:
+  scrape_interval: 30s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: node-exporter
+    static_configs:
+      - targets:
+          - "192.0.2.20:9100"
+          - "192.0.2.21:9100"
+
+  # Home Assistant metrics, authenticated with a long-lived token provisioned
+  # at runtime (see the observability module; the file is mounted read-only).
+  - job_name: home-assistant
+    metrics_path: /api/prometheus
+    authorization:
+      credentials_file: /etc/prometheus/ha-token
+    static_configs:
+      - targets: ["192.0.2.22:8123"]

@@ -1,0 +1,12 @@
+# Example homepage services. __DOMAIN__ is replaced with homelab.domain at
+# build time.
+- Services:
+    - Vaultwarden:
+        href: https://vault.__DOMAIN__
+        description: Password manager
+    - Grafana:
+        href: https://status.__DOMAIN__
+        description: Dashboards and alerts
+    - Prometheus:
+        href: https://metrics.__DOMAIN__
+        description: Metrics
