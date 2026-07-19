@@ -133,6 +133,14 @@ in
           monitors.conf. Point it at a per-host file from your config repo.
         '';
       };
+      hyprlockConf = lib.mkOption {
+        type = lib.types.path;
+        description = "hyprlock.conf installed into the user's ~/.config/hypr.";
+      };
+      hypridleConf = lib.mkOption {
+        type = lib.types.path;
+        description = "hypridle.conf installed into the user's ~/.config/hypr.";
+      };
       waybarConfig = lib.mkOption {
         type = lib.types.path;
         description = "waybar config.jsonc installed into the user's ~/.config/waybar.";

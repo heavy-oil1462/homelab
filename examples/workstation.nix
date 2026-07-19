@@ -22,6 +22,8 @@
       hyprlandConf = ./assets/hypr/hyprland.conf;
       hyprpaperConf = ./assets/hypr/hyprpaper.conf;
       monitorsConf = ./assets/hypr/monitors.conf;
+      hyprlockConf = ./assets/hypr/hyprlock.conf;
+      hypridleConf = ./assets/hypr/hypridle.conf;
       waybarConfig = ./assets/waybar/config.jsonc;
       waybarStyle = ./assets/waybar/style.css;
     };
