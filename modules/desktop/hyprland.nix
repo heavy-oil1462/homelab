@@ -13,6 +13,10 @@ in
     xwayland.enable = true;
   };
 
+  # Screen locker. The NixOS module also registers the PAM service hyprlock
+  # needs to check the password; installing the bare package is not enough.
+  programs.hyprlock.enable = true;
+
   # Force Electron and Chromium apps to use Wayland native
   environment.sessionVariables = {
     NIXOS_OZONE_WL = "1";
@@ -45,6 +49,8 @@ in
 
     waybar # Status bar (battery, clock, workspaces, volume, network)
     poweralertd # Sends low/critical battery notifications to dunst
+    hypridle # Idle daemon: locks and blanks the screen after a timeout
+    networkmanagerapplet # nm-applet tray icon for picking wifi networks
 
     grim # Screenshot capture
     slurp # Region picker for screenshots
@@ -71,6 +77,29 @@ in
       esac
     '')
 
+    # Lock, reboot, or power off. Locking goes through loginctl so hypridle's
+    # lock_cmd stays the single place that actually starts hyprlock; reboot
+    # and poweroff ask for confirmation in rofi since a stray click on the
+    # waybar button should not take the machine down.
+    (pkgs.writeShellScriptBin "hypr-power" ''
+      set -euo pipefail
+      case "''${1:-}" in
+        lock)
+          exec loginctl lock-session
+          ;;
+        reboot|poweroff)
+          choice=$(printf 'cancel\nconfirm' | rofi -dmenu -i -p "$1?")
+          if [ "$choice" = "confirm" ]; then
+            exec systemctl "$1"
+          fi
+          ;;
+        *)
+          echo "usage: hypr-power lock|reboot|poweroff" >&2
+          exit 1
+          ;;
+      esac
+    '')
+
     # Pick a past clipboard entry from rofi and put it back on the clipboard.
     (pkgs.writeShellScriptBin "hypr-cliphist" ''
       cliphist list | rofi -dmenu -i -p "Clipboard" | cliphist decode | wl-copy
@@ -87,9 +116,10 @@ in
       SUPER + F                 Fullscreen
       SUPER + SHIFT + F         Maximize within gaps
       SUPER + G                 Group/tab windows together
+      SUPER + L                 Lock screen
       SUPER + 1..9              Switch to workspace
       SUPER + SHIFT + 1..9      Move window to workspace
-      SUPER + arrows / h j k l  Move focus
+      SUPER + arrows / h j k    Move focus (vim l is taken by lock)
       SUPER + SHIFT + move key  Move window in layout
       SUPER + CTRL + h j k l    Resize active window
       SUPER + SHIFT + V         Clipboard history
@@ -129,6 +159,12 @@ in
       cp -f ${hypr.hyprpaperConf} /home/${username}/.config/hypr/hyprpaper.conf
       chown ${username}:users /home/${username}/.config/hypr/hyprpaper.conf
       chmod 644 /home/${username}/.config/hypr/hyprpaper.conf
+
+      # Lock screen and idle daemon configs
+      cp -f ${hypr.hyprlockConf} /home/${username}/.config/hypr/hyprlock.conf
+      cp -f ${hypr.hypridleConf} /home/${username}/.config/hypr/hypridle.conf
+      chown ${username}:users /home/${username}/.config/hypr/hyprlock.conf /home/${username}/.config/hypr/hypridle.conf
+      chmod 644 /home/${username}/.config/hypr/hyprlock.conf /home/${username}/.config/hypr/hypridle.conf
 
       # Waybar config (status bar with battery indicator)
       mkdir -p /home/${username}/.config/waybar
