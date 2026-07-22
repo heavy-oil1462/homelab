@@ -11,6 +11,7 @@ in
     ../modules/desktop/sound.nix
     ../modules/desktop/greeter.nix
     ../modules/desktop/hyprland.nix
+    ../modules/desktop/removable-media.nix
     ../modules/locale.nix
     ../modules/podman.nix
     ../modules/yubikey.nix
