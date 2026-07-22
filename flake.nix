@@ -45,6 +45,7 @@
         desktop-greeter = ./modules/desktop/greeter.nix;
         desktop-hyprland = ./modules/desktop/hyprland.nix;
         desktop-bluetooth = ./modules/desktop/bluetooth.nix;
+        desktop-removable-media = ./modules/desktop/removable-media.nix;
 
         # Role bundles.
         server-role = ./roles/server.nix;
