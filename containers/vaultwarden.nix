@@ -15,7 +15,7 @@
 
   virtualisation.oci-containers.containers = {
     vaultwarden = {
-      image = "docker.io/vaultwarden/server@sha256:d626d04934cd1192ad8ced1adb975099fca78cec33ab467d2d3c923cde7f3b0c"; # :latest as of 2026-06-13
+      image = "docker.io/vaultwarden/server@sha256:ebdfe70701c60ac0c28c697e787cea767d7972940b786037b29fe0d507f821e8"; # 1.37.1, :latest as of 2026-08-04
       user = "${toString config.users.users.vaultwarden.uid}:${toString config.users.groups.vaultwarden.gid}";
       autoStart = true;
       volumes = [
