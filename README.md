@@ -49,7 +49,8 @@ Roles:
 - `server-role`: headless VM baseline (grub, DHCP, podman, tailscale,
   node exporter, fluent-bit log shipping, tailnet-only SSH).
 - `workstation-role`: Hyprland desktop, greetd/tuigreet, pipewire, YubiKey
-  login, libvirt, and the agent sandbox.
+  login, libvirt, the agent sandbox, and a filebrowser web UI for the
+  user's home directory (tailnet-only, port 8080).
 
 Services (OCI containers, pinned by digest):
 
@@ -70,8 +71,9 @@ System:
   `homelab.adminKeys`), `acme` (Cloudflare DNS-01), `backups` (restic to any
   rclone remote), `locale`, `yubikey` (pam_u2f with a host-independent
   origin), `firewall` (role-based baseline), `nvidia`, `vm-disko`,
-  `tailscale`, `logging-agent`, `observability-agent`, and the desktop
-  modules.
+  `tailscale`, `logging-agent`, `observability-agent`, `filebrowser` (web
+  file manager for the primary user's home directory, tailnet-only), and
+  the desktop modules.
 
 Secrets are never part of the configuration: modules reference runtime paths
 under `/var/lib/secrets/` (Cloudflare token, restic password, HA token,

@@ -34,6 +34,7 @@
         podman = ./modules/podman.nix;
         tailscale = ./modules/tailscale.nix;
         firewall = ./modules/firewall.nix;
+        filebrowser = ./modules/filebrowser.nix;
         observability-agent = ./modules/observability-agent.nix;
         logging-agent = ./modules/logging-agent.nix;
         acme = ./modules/acme.nix;

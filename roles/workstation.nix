@@ -12,6 +12,7 @@ in
     ../modules/desktop/greeter.nix
     ../modules/desktop/hyprland.nix
     ../modules/desktop/removable-media.nix
+    ../modules/filebrowser.nix
     ../modules/locale.nix
     ../modules/podman.nix
     ../modules/yubikey.nix
