@@ -17,6 +17,20 @@ in
   # needs to check the password; installing the bare package is not enough.
   programs.hyprlock.enable = true;
 
+  # File open/save dialogs (browser uploads and downloads, discord attach,
+  # and so on) come from the desktop portal, and the hyprland portal backend
+  # does not implement FileChooser; the gtk backend that programs.hyprland
+  # also installs provides it. Routing normally comes from the
+  # hyprland-portals.conf shipped in the hyprland package, but that file is
+  # only matched when the portal service sees XDG_CURRENT_DESKTOP=Hyprland,
+  # which depends on the compositor exporting it into the systemd user
+  # environment before the portal is dbus-activated. When the match fails
+  # the gtk backend falls back to its legacy UseIn=gnome restriction and
+  # FileChooser has no backend at all: clicking browse silently does
+  # nothing. This generic fallback applies to any desktop name, so the
+  # dialogs work regardless of environment propagation timing.
+  xdg.portal.config.common.default = [ "hyprland" "gtk" ];
+
   # Force Electron and Chromium apps to use Wayland native
   environment.sessionVariables = {
     NIXOS_OZONE_WL = "1";
