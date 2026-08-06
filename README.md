@@ -59,6 +59,10 @@ Services (OCI containers, pinned by digest):
   dashboards and alerting.
 - `vaultwarden`, `homepage`, `homeassistant`, `nvr` (Frigate), `nextcloud`
   (AIO).
+- `unifi`: UniFi Network controller (linuxserver image) with its own
+  MongoDB container (auth enabled). Expects MONGO_INITDB_ROOT_USERNAME,
+  MONGO_INITDB_ROOT_PASSWORD, MONGO_USER and MONGO_PASS in
+  `/var/lib/secrets/unifi.env` at runtime.
 - `agent-sandbox`: a rootless podman sandbox for AI coding agents (Claude
   Code, Antigravity) with per-project state, shared gh/Claude auth, pinned
   commit identity, and an optional personal skills repo synced into every

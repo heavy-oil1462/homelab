@@ -59,6 +59,7 @@
         homeassistant = ./containers/homeassistant.nix;
         nvr = ./containers/nvr.nix;
         nextcloud = ./containers/nextcloud.nix;
+        unifi = ./containers/unifi.nix;
         agent-sandbox = ./containers/agent-sandbox.nix;
       };
 
