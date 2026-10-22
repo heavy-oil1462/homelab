@@ -49,8 +49,10 @@ let
     # writes the helper into the gitconfig of the project it ran in, and gitconfigs
     # are per-project (/root is a per-project volume), so pin the helper here too:
     # auth itself is shared via the agent-secrets volume, and this makes it usable
-    # from every project.
-    git config --global credential."https://github.com".helper '!gh auth git-credential'
+    # from every project. gh auth login writes the helper as two lines (an empty
+    # reset plus the gh helper), and a plain set refuses a multi-valued key, so
+    # replace every existing value.
+    git config --global --replace-all credential."https://github.com".helper '!gh auth git-credential'
 
     ${lib.optionalString (sb.gitName != null && sb.gitEmail != null) ''
       # Pin the commit identity on every start, so nothing committed from inside a
