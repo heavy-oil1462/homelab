@@ -56,11 +56,17 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
 
 ## Priorities, in order
 
-1. Keep the existing modules working on nixos-unstable: fixes the owner
-   reports come first.
-2. New services and workstation features as the owner asks for them on the
-   board.
-3. A CI workflow that runs `nix flake check` on every pull request.
+1. CI: a GitHub workflow runs `nix flake check` on every pull request, and
+   every module (including `nvidia`, `vm-disko`) is evaluated by an example.
+2. Existing modules follow the principles: Nextcloud pinned and
+   tailnet-only, Frigate secrets under `/var/lib/secrets/`, no container
+   breaks when a secret file is missing.
+3. Every stateful service is backed up with a consistent snapshot, and a
+   restore runbook exists.
+4. Failures alert: provisioned rules for failed backups and units, disk,
+   host down and certificate expiry, with a contact point.
+5. Image digests and `flake.lock` stay current without manual tracking.
+6. New services the owner picks on the board.
 
 ## Not now
 
