@@ -5,6 +5,7 @@
     ./options.nix
     ./user.nix
     ./firewall.nix
+    ./deploy-ca.nix
   ];
 
   # Default on; the server role turns this off so server updates are always
