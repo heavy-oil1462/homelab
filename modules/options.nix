@@ -33,6 +33,18 @@ in
       description = "SSH public keys authorized for the primary user.";
     };
 
+    deployCaKeys = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "sk-ssh-ed25519@openssh.com AAAA... deploy-ca" ];
+      description = ''
+        SSH CA public keys trusted for root logins. When set, every host runs
+        sshd (loopback only unless the openssh module is imported) and accepts
+        root certificates signed by these keys, so a deploy tool can sign one
+        short-lived certificate and reach the whole fleet with it.
+      '';
+    };
+
     tailnetIp = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;

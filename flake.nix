@@ -30,6 +30,7 @@
         # Individual modules.
         user = ./modules/user.nix;
         openssh = ./modules/openssh.nix;
+        deploy-ca = ./modules/deploy-ca.nix;
         locale = ./modules/locale.nix;
         podman = ./modules/podman.nix;
         tailscale = ./modules/tailscale.nix;
