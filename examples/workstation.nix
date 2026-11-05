@@ -19,9 +19,9 @@
     };
     yubikey.u2fKeysFile = ./assets/u2f_keys;
     hyprland = {
-      hyprlandConf = ./assets/hypr/hyprland.conf;
+      hyprlandLua = ./assets/hypr/hyprland.lua;
       hyprpaperConf = ./assets/hypr/hyprpaper.conf;
-      monitorsConf = ./assets/hypr/monitors.conf;
+      monitorsLua = ./assets/hypr/monitors.lua;
       hyprlockConf = ./assets/hypr/hyprlock.conf;
       hypridleConf = ./assets/hypr/hypridle.conf;
       waybarConfig = ./assets/waybar/config.jsonc;

@@ -72,7 +72,7 @@ in
     libnotify # notify-send, used by the screenshot helper
 
     # Region screenshot to clipboard, or full screen saved to a file (and
-    # copied). Bound to Print / SUPER+SHIFT+S in hyprland.conf.
+    # copied). Bound to Print / SUPER+SHIFT+S in hyprland.lua.
     (pkgs.writeShellScriptBin "hypr-screenshot" ''
       set -euo pipefail
       dir="$HOME/Pictures/Screenshots"
@@ -157,17 +157,17 @@ in
       mkdir -p /home/${username}/.config/hypr
       chown ${username}:users /home/${username}/.config/hypr
 
-      # Install the Hyprland config verbatim.
-      cp -f ${hypr.hyprlandConf} /home/${username}/.config/hypr/hyprland.conf
+      # Install the Hyprland config verbatim. Hyprland 0.57 and later read
+      # only hyprland.lua; the host-specific monitor layout sits next to it
+      # as monitors.lua, loaded with require("monitors").
+      cp -f ${hypr.hyprlandLua} /home/${username}/.config/hypr/hyprland.lua
+      cp -f ${hypr.monitorsLua} /home/${username}/.config/hypr/monitors.lua
+      chown ${username}:users /home/${username}/.config/hypr/hyprland.lua /home/${username}/.config/hypr/monitors.lua
+      chmod 644 /home/${username}/.config/hypr/hyprland.lua /home/${username}/.config/hypr/monitors.lua
 
-      # Host-specific monitor layout, sourced by hyprland.conf.
-      cp -f ${hypr.monitorsConf} /home/${username}/.config/hypr/monitors.conf
-      chown ${username}:users /home/${username}/.config/hypr/monitors.conf
-      chmod 644 /home/${username}/.config/hypr/monitors.conf
-
-      # Set correct ownership and permissions
-      chown ${username}:users /home/${username}/.config/hypr/hyprland.conf
-      chmod 644 /home/${username}/.config/hypr/hyprland.conf
+      # Drop the old hyprlang files this script used to install, so a stale
+      # copy cannot be mistaken for the live config.
+      rm -f /home/${username}/.config/hypr/hyprland.conf /home/${username}/.config/hypr/monitors.conf
 
       # Copy hyprpaper config
       cp -f ${hypr.hyprpaperConf} /home/${username}/.config/hypr/hyprpaper.conf
