@@ -130,19 +130,23 @@ in
     };
 
     hyprland = {
-      hyprlandConf = lib.mkOption {
+      hyprlandLua = lib.mkOption {
         type = lib.types.path;
-        description = "hyprland.conf installed into the user's ~/.config/hypr.";
+        description = ''
+          hyprland.lua installed into the user's ~/.config/hypr. Hyprland
+          0.57 and later read only the Lua config.
+        '';
       };
       hyprpaperConf = lib.mkOption {
         type = lib.types.path;
         description = "hyprpaper.conf installed into the user's ~/.config/hypr.";
       };
-      monitorsConf = lib.mkOption {
+      monitorsLua = lib.mkOption {
         type = lib.types.path;
         description = ''
-          Host-specific monitor layout, sourced by hyprland.conf as
-          monitors.conf. Point it at a per-host file from your config repo.
+          Host-specific monitor layout, installed as monitors.lua next to
+          hyprland.lua so that require("monitors") loads it. Point it at a
+          per-host file from your config repo.
         '';
       };
       hyprlockConf = lib.mkOption {

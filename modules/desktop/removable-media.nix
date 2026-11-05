@@ -6,7 +6,7 @@
   # udisks2 is the system daemon that does the actual mounting. Its default
   # polkit rules already allow the active local session to mount and unmount
   # removable drives without a password, so no extra rules are needed.
-  # Dolphin talks to it directly; udiskie (started from hyprland.conf) sits
+  # Dolphin talks to it directly; udiskie (started from hyprland.lua) sits
   # in the waybar tray, automounts anything plugged in under
   # /run/media/<user>/ and offers per-device unmount from its menu, which
   # also covers the terminal file manager since a mounted stick is just a
