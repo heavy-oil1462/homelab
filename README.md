@@ -85,6 +85,22 @@ Secrets are never part of the configuration: modules reference runtime paths
 under `/var/lib/secrets/` (Cloudflare token, restic password, HA token,
 camera credentials) that you provision on the host out of band.
 
+## Static user ids
+
+Containers that run as a dedicated user need its uid at evaluation time, so
+those users get static ids. NixOS assigns automatic system ids downward from
+999 and never moves an existing user to a declared id; it also does not check
+that a declared id is free. A static id near 999 can therefore silently share
+a uid with a user that already exists on the host. New static ids come from
+the block 600 to 699, which automatic assignment does not reach in practice:
+
+- 601: registry
+
+Older modules predate the block and keep their ids, since changing the uid of
+a deployed user is not applied by NixOS: 990 frigate (nvr), 989 unifi, 988
+unifi-db. Config repos that add their own container users should use a
+separate block (for example 700 to 799).
+
 ## Configuration files
 
 Modules take their service configs as paths (`homelab.reverseProxy.caddyfile`,
