@@ -28,14 +28,14 @@
   imports = [ ../modules/options.nix ];
 
   # Static uid so the container's user option has a value at eval time.
-  # 988 to 990 are taken by unifi.nix and nvr.nix.
+  # See "Static user ids" in the README for the allocation.
   users.users.registry = {
     isSystemUser = true;
     group = "registry";
-    uid = 987;
+    uid = 601;
   };
   users.groups.registry = {
-    gid = 987;
+    gid = 601;
   };
 
   systemd.tmpfiles.rules = [
