@@ -17,7 +17,7 @@ start.__DOMAIN__:443 {
 
 vault.__DOMAIN__:443 {
 	import site_tls
-	reverse_proxy vaultwarden:80
+	reverse_proxy vaultwarden:8080
 }
 
 registry.__DOMAIN__:443 {
