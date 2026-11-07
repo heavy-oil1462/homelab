@@ -94,6 +94,7 @@ that a declared id is free. A static id near 999 can therefore silently share
 a uid with a user that already exists on the host. New static ids come from
 the block 600 to 699, which automatic assignment does not reach in practice:
 
+- 600: vaultwarden
 - 601: registry
 
 Older modules predate the block and keep their ids, since changing the uid of
