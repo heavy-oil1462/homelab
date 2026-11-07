@@ -61,6 +61,7 @@
         nvr = ./containers/nvr.nix;
         nextcloud = ./containers/nextcloud.nix;
         unifi = ./containers/unifi.nix;
+        registry = ./containers/registry.nix;
         agent-sandbox = ./containers/agent-sandbox.nix;
       };
 

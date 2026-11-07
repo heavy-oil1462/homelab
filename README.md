@@ -63,6 +63,10 @@ Services (OCI containers, pinned by digest):
   MongoDB container (auth enabled). Expects MONGO_INITDB_ROOT_USERNAME,
   MONGO_INITDB_ROOT_PASSWORD, MONGO_USER and MONGO_PASS in
   `/var/lib/secrets/unifi.env` at runtime.
+- `registry`: private OCI image registry (Docker Official `registry` image,
+  CNCF Distribution) for your own images, published through the reverse
+  proxy. Every pull and push needs a login from a bcrypt htpasswd file at
+  `/var/lib/secrets/registry.htpasswd` at runtime.
 - `agent-sandbox`: a rootless podman sandbox for AI coding agents (Claude
   Code, Antigravity) with per-project state, shared gh/Claude auth, pinned
   commit identity, and an optional personal skills repo synced into every

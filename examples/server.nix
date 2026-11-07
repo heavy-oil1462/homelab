@@ -18,6 +18,7 @@
     ../containers/nvr.nix
     ../containers/nextcloud.nix
     ../containers/unifi.nix
+    ../containers/registry.nix
   ];
 
   homelab = {
