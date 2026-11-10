@@ -67,6 +67,15 @@ Services (OCI containers, pinned by digest):
   CNCF Distribution) for your own images, published through the reverse
   proxy. Every pull and push needs a login from a bcrypt htpasswd file at
   `/var/lib/secrets/registry.htpasswd` at runtime.
+- `forgejo`: Forgejo git forge (rootless image, SQLite) at git.<domain>
+  through the reverse proxy, with its built in SSH server published on the
+  tailnet address, port 2222 (`homelab.forgejo.sshAddress`,
+  `homelab.forgejo.sshPort`), Actions enabled and registration closed. Site
+  specific settings go in `homelab.forgejo.extraEnvironment` as
+  FORGEJO__section__KEY values. Expects a secret key at
+  `/var/lib/secrets/forgejo-secret-key` at runtime (for example
+  `openssl rand -hex 32`, owned by forgejo, mode 0400); Forgejo does not
+  start while it is empty.
 - `agent-sandbox`: a rootless podman sandbox for AI coding agents (Claude
   Code, Antigravity) with per-project state, shared gh/Claude auth, pinned
   commit identity, and an optional personal skills repo synced into every
@@ -96,6 +105,7 @@ the block 600 to 699, which automatic assignment does not reach in practice:
 
 - 600: vaultwarden
 - 601: registry
+- 602: forgejo
 
 Older modules predate the block and keep their ids, since changing the uid of
 a deployed user is not applied by NixOS: 990 frigate (nvr), 989 unifi, 988
