@@ -76,6 +76,14 @@ Services (OCI containers, pinned by digest):
   `/var/lib/secrets/forgejo-secret-key` at runtime (for example
   `openssl rand -hex 32`, owned by forgejo, mode 0400); Forgejo does not
   start while it is empty.
+  With `homelab.forgejo.admin.name` and `homelab.forgejo.admin.email` set,
+  the `forgejo-admin` unit creates that admin once Forgejo answers, if it
+  has no admin yet, and safely does nothing on later boots. Its one-time
+  password is only in one line of the unit's journal, with the sign in URL,
+  https://git.<domain>/user/login:
+  `journalctl -u forgejo-admin`. Forgejo asks for a new password at the
+  first sign in; add a passkey after that. Unset, the admin is created by
+  hand as the module's header comment shows.
 - `agent-sandbox`: a rootless podman sandbox for AI coding agents (Claude
   Code, Antigravity) with per-project state, shared gh/Claude auth, pinned
   commit identity, and an optional personal skills repo synced into every

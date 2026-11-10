@@ -122,6 +122,8 @@
           (builtins.unsafeDiscardStringContext exampleServer.config.system.build.toplevel.drvPath);
         example-workstation = pkgs.writeText "example-workstation-drv"
           (builtins.unsafeDiscardStringContext exampleWorkstation.config.system.build.toplevel.drvPath);
+        # The forgejo-admin unit's script against a stubbed podman.
+        forgejo-admin = pkgs.callPackage ./tests/forgejo-admin.nix { };
       };
     };
 }

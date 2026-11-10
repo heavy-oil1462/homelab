@@ -51,8 +51,14 @@
       scriptsFile = ./assets/homeassistant/scripts.yaml;
     };
     nvr.configFile = ./assets/frigate.yaml;
-    forgejo.extraEnvironment = {
-      FORGEJO__repository__DEFAULT_BRANCH = "main";
+    forgejo = {
+      extraEnvironment = {
+        FORGEJO__repository__DEFAULT_BRANCH = "main";
+      };
+      admin = {
+        name = "alice";
+        email = "alice@example.com";
+      };
     };
   };
 
