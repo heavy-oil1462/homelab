@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, utils, ... }:
 
 # Forgejo, the git forge, as git.<domain>. The web UI and the API go through
 # the reverse proxy, for example:
@@ -14,8 +14,13 @@
 # ssh://git@git.<domain>:2222/<owner>/<repo>.git.
 #
 # Data, the SQLite database, repositories and the generated app.ini live in
-# /var/lib/forgejo. Registration is closed; create the first admin by hand
-# after the first start:
+# /var/lib/forgejo. Registration is closed. With homelab.forgejo.admin.name
+# and .email set, the forgejo-admin unit creates the first admin once Forgejo
+# answers, if it has none, and prints its one-time password to the journal:
+#
+#   journalctl -u forgejo-admin
+#
+# Without them, create the first admin by hand after the first start:
 #
 #   podman exec forgejo forgejo admin user create --admin \
 #     --username <name> --email <address> --random-password
@@ -40,6 +45,8 @@ let
   sshPort = toString cfg.sshPort;
   uid = config.users.users.forgejo.uid;
   gid = config.users.groups.forgejo.gid;
+  admin = cfg.admin;
+  adminScript = pkgs.callPackage ./forgejo-admin.nix { };
 in
 {
   imports = [ ../modules/options.nix ];
@@ -57,10 +64,16 @@ in
     gid = lib.mkDefault 602;
   };
 
-  assertions = [{
-    assertion = cfg.sshAddress != null;
-    message = "containers/forgejo.nix publishes SSH on homelab.forgejo.sshAddress (homelab.tailnetIp by default), which is unset.";
-  }];
+  assertions = [
+    {
+      assertion = cfg.sshAddress != null;
+      message = "containers/forgejo.nix publishes SSH on homelab.forgejo.sshAddress (homelab.tailnetIp by default), which is unset.";
+    }
+    {
+      assertion = (admin.name == null) == (admin.email == null);
+      message = "containers/forgejo.nix needs both homelab.forgejo.admin.name and homelab.forgejo.admin.email, or neither.";
+    }
+  ];
 
   # The f rule creates an empty file if none exists, so podman never makes a
   # directory at the mount's source; it does not touch an existing file.
@@ -117,6 +130,28 @@ in
     serviceConfig = {
       Restart = lib.mkForce "on-failure";
       RestartSec = lib.mkForce 5;
+    };
+  };
+
+  # Runs on every boot and does nothing once an admin exists. The password
+  # is only in the journal line the script prints. Wants rather than
+  # requires: podman-forgejo may fail its first starts until the tailnet
+  # address exists, and the script waits for Forgejo to answer instead.
+  systemd.services.forgejo-admin = lib.mkIf (admin.name != null) {
+    description = "Create Forgejo's first admin";
+    after = [ "podman-forgejo.service" ];
+    wants = [ "podman-forgejo.service" ];
+    wantedBy = [ "multi-user.target" ];
+    path = [ config.virtualisation.podman.package ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = utils.escapeSystemdExecArgs [
+        "${adminScript}/bin/forgejo-admin"
+        admin.name
+        admin.email
+        "https://git.${domain}/user/login"
+      ];
     };
   };
 }

@@ -263,6 +263,26 @@ in
           clash. Never put secrets here: the values end up in the Nix store.
         '';
       };
+      admin = {
+        name = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          example = "alice";
+          description = ''
+            User name of Forgejo's first admin. With this and the email set,
+            the forgejo-admin unit creates the admin on start when Forgejo
+            has none, with a one-time password it prints to its journal
+            (journalctl -u forgejo-admin). Null leaves the admin to be
+            created by hand.
+          '';
+        };
+        email = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          example = "alice@example.com";
+          description = "Email address of Forgejo's first admin; see homelab.forgejo.admin.name.";
+        };
+      };
     };
 
     agentSandbox = {
