@@ -19,6 +19,7 @@
     ../containers/nextcloud.nix
     ../containers/unifi.nix
     ../containers/registry.nix
+    ../containers/forgejo.nix
   ];
 
   homelab = {
@@ -50,6 +51,9 @@
       scriptsFile = ./assets/homeassistant/scripts.yaml;
     };
     nvr.configFile = ./assets/frigate.yaml;
+    forgejo.extraEnvironment = {
+      FORGEJO__repository__DEFAULT_BRANCH = "main";
+    };
   };
 
   networking.hostName = "example-server";

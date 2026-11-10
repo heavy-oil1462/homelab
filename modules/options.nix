@@ -228,6 +228,43 @@ in
       };
     };
 
+    forgejo = {
+      sshPort = lib.mkOption {
+        type = lib.types.port;
+        default = 2222;
+        description = ''
+          Port of Forgejo's built in SSH server, both inside the container
+          and where it is published on the host. Clone URLs carry it:
+          ssh://git@git.<domain>:<port>/<owner>/<repo>.git.
+        '';
+      };
+      sshAddress = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = cfg.tailnetIp;
+        defaultText = lib.literalExpression "config.homelab.tailnetIp";
+        example = "100.64.0.1";
+        description = ''
+          Host address Forgejo's SSH port is published on. Defaults to the
+          tailnet address, which keeps git over SSH tailnet-only; the module
+          refuses to evaluate while it is null rather than listen on every
+          interface.
+        '';
+      };
+      extraEnvironment = lib.mkOption {
+        type = lib.types.attrsOf lib.types.str;
+        default = { };
+        example = {
+          FORGEJO__mailer__ENABLED = "true";
+          FORGEJO__repository__DEFAULT_BRANCH = "main";
+        };
+        description = ''
+          Site specific Forgejo settings as FORGEJO__section__KEY environment
+          variables, added to the module's own and overriding them on a
+          clash. Never put secrets here: the values end up in the Nix store.
+        '';
+      };
+    };
+
     agentSandbox = {
       gitName = lib.mkOption {
         type = lib.types.nullOr lib.types.str;

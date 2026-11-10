@@ -62,6 +62,7 @@
         nextcloud = ./containers/nextcloud.nix;
         unifi = ./containers/unifi.nix;
         registry = ./containers/registry.nix;
+        forgejo = ./containers/forgejo.nix;
         agent-sandbox = ./containers/agent-sandbox.nix;
       };
 
