@@ -17,8 +17,9 @@ in
     (lib.mkIf (cfg.role == "server") {
       # SSH is tailnet-only. Deploys and admin SSH go over Tailscale (the bare
       # hostnames resolve to the tailnet IP), so the LAN no longer needs port
-      # 22. Console access via the hypervisor remains as a recovery path if
-      # Tailscale is ever down.
+      # 22. Console access via the hypervisor remains as a recovery path for
+      # VMs if Tailscale is ever down. Bare metal hosts have no console login,
+      # so they join the tailnet at install time (modules/tailscale.nix).
       networking.firewall.interfaces = {
         tailscale0.allowedTCPPorts = [ 22 ];
       };
