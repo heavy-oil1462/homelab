@@ -3,9 +3,16 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Only for the checks: examples/vm.nix evaluates vm-disko against disko's
+    # module. The exported modules do not import it; consumers bring their
+    # own disko (docs/adr/0001-disko-input-for-checks.md).
+    disko = {
+      url = "github:nix-community/disko";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, disko }:
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -16,6 +23,10 @@
       };
       exampleServer = exampleHost ./examples/server.nix;
       exampleWorkstation = exampleHost ./examples/workstation.nix;
+      exampleVm = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [ disko.nixosModules.disko ./examples/vm.nix ];
+      };
     in
     {
       nixosModules = {
@@ -122,6 +133,8 @@
           (builtins.unsafeDiscardStringContext exampleServer.config.system.build.toplevel.drvPath);
         example-workstation = pkgs.writeText "example-workstation-drv"
           (builtins.unsafeDiscardStringContext exampleWorkstation.config.system.build.toplevel.drvPath);
+        example-vm = pkgs.writeText "example-vm-drv"
+          (builtins.unsafeDiscardStringContext exampleVm.config.system.build.toplevel.drvPath);
         # The forgejo-admin unit's script against a stubbed podman.
         forgejo-admin = pkgs.callPackage ./tests/forgejo-admin.nix { };
       };

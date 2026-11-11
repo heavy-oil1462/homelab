@@ -37,10 +37,11 @@ modules = [
 ]
 ```
 
-See `examples/` for a full server host, a workstation host, and a consumer
-flake. `examples/assets/` holds commented starting points for every config
-file a module consumes (Caddyfile, Frigate, Prometheus, homepage, Home
-Assistant, Hyprland). All example IPs are from RFC 5737 documentation ranges.
+See `examples/` for a full server host, a workstation host, a VM host on a
+disko layout, and a consumer flake. `examples/assets/` holds commented
+starting points for every config file a module consumes (Caddyfile, Frigate,
+Prometheus, homepage, Home Assistant, Hyprland). All example IPs are from
+RFC 5737 documentation ranges.
 
 ## Modules
 
@@ -94,7 +95,10 @@ System:
 - `common` (auto-upgrade, GC, flakes, user, firewall), `openssh` (keys from
   `homelab.adminKeys`), `acme` (Cloudflare DNS-01), `backups` (restic to any
   rclone remote), `locale`, `yubikey` (pam_u2f with a host-independent
-  origin), `firewall` (role-based baseline), `nvidia`, `vm-disko`,
+  origin), `firewall` (role-based baseline), `nvidia` (proprietary driver;
+  the host must allow the unfree `nvidia-x11` and `nvidia-settings`, as
+  `examples/workstation.nix` does), `vm-disko` (single-disk VM layout; needs
+  disko's NixOS module from your own flake, as `examples/vm.nix` shows),
   `tailscale`, `logging-agent`, `observability-agent`, and the desktop
   modules.
 
