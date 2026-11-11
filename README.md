@@ -87,7 +87,7 @@ Services (OCI containers, pinned by digest):
   hand as the module's header comment shows. The module does not back
   itself up; add a backup job on the host, as `examples/server.nix` does:
   `homelab.backups.jobs.forgejo` with path `/var/lib/forgejo` and database
-  `/var/lib/forgejo/data/forgejo.db`.
+  `/var/lib/forgejo/data/gitea.db`.
 - `agent-sandbox`: a rootless podman sandbox for AI coding agents (Claude
   Code, Antigravity) with per-project state, shared gh/Claude auth, pinned
   commit identity, and an optional personal skills repo synced into every

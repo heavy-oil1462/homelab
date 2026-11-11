@@ -32,10 +32,10 @@
     backups = {
       resticRepo = "rclone:remote:homelab-backup";
       # Forgejo's data dir is /var/lib/gitea in the container, and the
-      # rootless image keeps the SQLite database in its data/ directory.
+      # rootless image keeps the SQLite database at data/gitea.db (not forgejo.db).
       jobs.forgejo = {
         paths = [ "/var/lib/forgejo" ];
-        sqliteDatabases = [ "/var/lib/forgejo/data/forgejo.db" ];
+        sqliteDatabases = [ "/var/lib/forgejo/data/gitea.db" ];
       };
     };
 

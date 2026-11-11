@@ -11,13 +11,13 @@ A job declares its files and its live SQLite databases:
 ```nix
 homelab.backups.jobs.forgejo = {
   paths = [ "/var/lib/forgejo" ];
-  sqliteDatabases = [ "/var/lib/forgejo/data/forgejo.db" ];
+  sqliteDatabases = [ "/var/lib/forgejo/data/gitea.db" ];
 };
 ```
 
 Before each run every database is copied with sqlite3's `.backup` to the
 same path under `/var/backup/<job>/`, so the snapshot holds a consistent copy
-at `/var/backup/forgejo/var/lib/forgejo/data/forgejo.db` and no live database
+at `/var/backup/forgejo/var/lib/forgejo/data/gitea.db` and no live database
 file. Everything else in `paths` is copied as it is at that moment. A git
 push during a run can therefore leave a repository half copied; check
 repositories with `git fsck` after a restore, as below.
@@ -70,11 +70,11 @@ user. Commands run as root on the host.
 
    The scratch directory holds the files at their full paths:
    `/root/restore-forgejo/var/lib/forgejo` and the database copy at
-   `/root/restore-forgejo/var/backup/forgejo/var/lib/forgejo/data/forgejo.db`.
+   `/root/restore-forgejo/var/backup/forgejo/var/lib/forgejo/data/gitea.db`.
    Check the copy before going on:
 
    ```sh
-   sqlite3 /root/restore-forgejo/var/backup/forgejo/var/lib/forgejo/data/forgejo.db 'PRAGMA integrity_check'
+   sqlite3 /root/restore-forgejo/var/backup/forgejo/var/lib/forgejo/data/gitea.db 'PRAGMA integrity_check'
    ```
 
 3. Stop the container, and its backup so it does not run halfway:
@@ -96,10 +96,10 @@ user. Commands run as root on the host.
    none are left over:
 
    ```sh
-   cp /root/restore-forgejo/var/backup/forgejo/var/lib/forgejo/data/forgejo.db \
-     /var/lib/forgejo/data/forgejo.db
-   rm -f /var/lib/forgejo/data/forgejo.db-wal /var/lib/forgejo/data/forgejo.db-shm \
-     /var/lib/forgejo/data/forgejo.db-journal
+   cp /root/restore-forgejo/var/backup/forgejo/var/lib/forgejo/data/gitea.db \
+     /var/lib/forgejo/data/gitea.db
+   rm -f /var/lib/forgejo/data/gitea.db-wal /var/lib/forgejo/data/gitea.db-shm \
+     /var/lib/forgejo/data/gitea.db-journal
    ```
 
 6. Fix ownership. Container users have static ids (see "Static user ids" in
