@@ -1,0 +1,43 @@
+# Runs `nix flake check` on every push to any branch and on pull requests.
+# Nothing here deploys, pushes or needs secrets beyond the job's own token.
+name: check
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  flake-check:
+    runs-on: docker
+    container:
+      # The runner's default image has no Nix; run the job in the official
+      # Nix image instead of relying on the host's Nix.
+      image: docker.io/nixos/nix@sha256:b49cb33f3a7e5cf3933ad8774529de0e3807ec5cf54987aa7ccdfb49f2fc55ed # 2.35.6, :latest as of 2026-11-11
+    env:
+      # The job runs in an unprivileged container, where the Nix build
+      # sandbox cannot set up its namespaces, so it is turned off here.
+      NIX_CONFIG: |
+        experimental-features = nix-command flakes
+        sandbox = false
+    steps:
+      # nixos/nix has no node, so actions/checkout cannot run in it:
+      # check out the commit with plain git and the job token.
+      - name: Check out
+        env:
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          auth=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
+          git config --global --add safe.directory '*'
+          git init -q .
+          git remote add origin "$SERVER_URL/$REPOSITORY.git"
+          git -c http.extraHeader="Authorization: Basic $auth" \
+            fetch -q --depth=1 origin "$SHA"
+          git checkout -q --detach FETCH_HEAD
+
+      - name: nix flake check
+        run: nix flake check --no-update-lock-file --show-trace
