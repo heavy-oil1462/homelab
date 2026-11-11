@@ -1,12 +1,14 @@
-# Example workstation host: Hyprland desktop, yubikey login, agent sandbox.
+# Example workstation host: Hyprland desktop on an NVIDIA GPU, yubikey login,
+# agent sandbox.
 # Used by the flake's checks; copy it as a starting point for your own host.
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
 {
   imports = [
     ../modules/common.nix
     ../roles/workstation.nix
     ../modules/desktop/bluetooth.nix
+    ../modules/nvidia.nix
   ];
 
   homelab = {
@@ -37,8 +39,16 @@
 
   networking.hostName = "example-workstation";
 
-  # The workstation role pulls in a few unfree packages (vscode).
-  nixpkgs.config.allowUnfree = true;
+  # Allow exactly the unfree packages this host uses rather than everything:
+  # vscode from the workstation role, and the driver from the nvidia module.
+  # A consumer importing either module needs the same predicate (or its own
+  # allowUnfree) in their host.
+  nixpkgs.config.allowUnfreePredicate = pkg:
+    builtins.elem (lib.getName pkg) [
+      "vscode"
+      "nvidia-x11"
+      "nvidia-settings"
+    ];
 
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
