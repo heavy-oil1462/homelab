@@ -131,7 +131,7 @@ in
         {
           forgejo = {
             paths = [ "/var/lib/forgejo" ];
-            sqliteDatabases = [ "/var/lib/forgejo/data/forgejo.db" ];
+            sqliteDatabases = [ "/var/lib/forgejo/data/gitea.db" ];
           };
         }
       '';
@@ -153,12 +153,12 @@ in
           sqliteDatabases = lib.mkOption {
             type = lib.types.listOf lib.types.str;
             default = [ ];
-            example = [ "/var/lib/forgejo/data/forgejo.db" ];
+            example = [ "/var/lib/forgejo/data/gitea.db" ];
             description = ''
               Live SQLite databases, as absolute paths. Before each run every
               one is copied with sqlite3's .backup to the same path under
               /var/backup/<name>/ (for example
-              /var/backup/forgejo/var/lib/forgejo/data/forgejo.db), and the
+              /var/backup/forgejo/var/lib/forgejo/data/gitea.db), and the
               copy is backed up instead of the live file. The live file and
               its -wal, -shm and -journal sidecars are excluded. The copies
               are removed after the run, also when it fails. A database that
