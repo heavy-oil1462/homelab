@@ -118,7 +118,73 @@ in
     backups.resticRepo = lib.mkOption {
       type = lib.types.str;
       example = "rclone:gdrive:my-backup";
-      description = "restic repository string for the vaultwarden backup job.";
+      description = ''
+        restic repository string shared by every backup job: the built in
+        vaultwarden job and each entry of homelab.backups.jobs. Jobs tell
+        their snapshots apart by tag (the job name) and by path.
+      '';
+    };
+
+    backups.jobs = lib.mkOption {
+      default = { };
+      example = lib.literalExpression ''
+        {
+          forgejo = {
+            paths = [ "/var/lib/forgejo" ];
+            sqliteDatabases = [ "/var/lib/forgejo/data/forgejo.db" ];
+          };
+        }
+      '';
+      description = ''
+        restic backup jobs, each a restic-backups-<name> unit and timer
+        against homelab.backups.resticRepo, with the password and rclone
+        credentials in /var/lib/secrets/restic-password and
+        /var/lib/secrets/rclone.env. The name vaultwarden is taken by the
+        built in job. Restoring is described in docs/backups.md.
+      '';
+      type = lib.types.attrsOf (lib.types.submodule {
+        options = {
+          paths = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            example = [ "/var/lib/forgejo" ];
+            description = "Files and directories to back up.";
+          };
+
+          sqliteDatabases = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            example = [ "/var/lib/forgejo/data/forgejo.db" ];
+            description = ''
+              Live SQLite databases, as absolute paths. Before each run every
+              one is copied with sqlite3's .backup to the same path under
+              /var/backup/<name>/ (for example
+              /var/backup/forgejo/var/lib/forgejo/data/forgejo.db), and the
+              copy is backed up instead of the live file. The live file and
+              its -wal, -shm and -journal sidecars are excluded. The copies
+              are removed after the run, also when it fails. A database that
+              does not exist fails the run.
+            '';
+          };
+
+          exclude = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            example = [ "/var/lib/forgejo/data/tmp" ];
+            description = "restic exclude patterns, in addition to the live databases.";
+          };
+
+          schedule = lib.mkOption {
+            type = lib.types.str;
+            default = "daily";
+            example = "*-*-* 03:00:00";
+            description = ''
+              When the job runs, as a systemd OnCalendar value. Missed runs
+              are caught up after boot (Persistent). Jobs may overlap; they
+              wait for each other's repository lock.
+            '';
+          };
+        };
+      });
     };
 
     yubikey.u2fKeysFile = lib.mkOption {

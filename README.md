@@ -84,7 +84,10 @@ Services (OCI containers, pinned by digest):
   https://git.<domain>/user/login:
   `journalctl -u forgejo-admin`. Forgejo asks for a new password at the
   first sign in; add a passkey after that. Unset, the admin is created by
-  hand as the module's header comment shows.
+  hand as the module's header comment shows. The module does not back
+  itself up; add a backup job on the host, as `examples/server.nix` does:
+  `homelab.backups.jobs.forgejo` with path `/var/lib/forgejo` and database
+  `/var/lib/forgejo/data/forgejo.db`.
 - `agent-sandbox`: a rootless podman sandbox for AI coding agents (Claude
   Code, Antigravity) with per-project state, shared gh/Claude auth, pinned
   commit identity, and an optional personal skills repo synced into every
@@ -94,8 +97,10 @@ System:
 
 - `common` (auto-upgrade, GC, flakes, user, firewall), `openssh` (keys from
   `homelab.adminKeys`), `acme` (Cloudflare DNS-01), `backups` (restic to any
-  rclone remote), `locale`, `yubikey` (pam_u2f with a host-independent
-  origin), `firewall` (role-based baseline), `nvidia` (proprietary driver;
+  rclone remote: Vaultwarden, plus the jobs in `homelab.backups.jobs`, with
+  consistent SQLite snapshots; restoring is in
+  [docs/backups.md](docs/backups.md)), `locale`, `yubikey` (pam_u2f with a
+  host-independent origin), `firewall` (role-based baseline), `nvidia` (proprietary driver;
   the host must allow the unfree `nvidia-x11` and `nvidia-settings`, as
   `examples/workstation.nix` does), `vm-disko` (single-disk VM layout; needs
   disko's NixOS module from your own flake, as `examples/vm.nix` shows),

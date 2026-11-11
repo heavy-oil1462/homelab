@@ -15,3 +15,5 @@ Status is one of:
 
 - [0001](0001-disko-input-for-checks.md) disko is a flake input for the
   checks only (Accepted)
+- [0002](0002-generic-backup-jobs.md) backups are declared per host as
+  homelab.backups.jobs (Accepted)
