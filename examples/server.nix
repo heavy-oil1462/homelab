@@ -29,7 +29,15 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPlaceholderPlaceholderPlaceholder0000000000A alice@example"
     ];
     tailnetIp = "100.64.0.1";
-    backups.resticRepo = "rclone:remote:homelab-backup";
+    backups = {
+      resticRepo = "rclone:remote:homelab-backup";
+      # Forgejo's data dir is /var/lib/gitea in the container, and the
+      # rootless image keeps the SQLite database in its data/ directory.
+      jobs.forgejo = {
+        paths = [ "/var/lib/forgejo" ];
+        sqliteDatabases = [ "/var/lib/forgejo/data/forgejo.db" ];
+      };
+    };
 
     reverseProxy = {
       caddyfile = ./assets/caddy/Caddyfile;
