@@ -1,5 +1,6 @@
-# ADR-0003: Probe targets reach Prometheus through file_sd
-Status: Proposed
+# ADR-0004: Probe targets reach Prometheus through file_sd
+
+Status: Accepted
 
 ## Context
 
