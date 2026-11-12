@@ -2,6 +2,7 @@
 
 let
   cfg = config.homelab.observability;
+  proxyAddress = config.homelab.reverseProxy.address;
 
   prometheusConfig = pkgs.writeText "prometheus.yml" (
     builtins.readFile cfg.prometheusConfig
@@ -51,6 +52,13 @@ let
 in
 {
   imports = [ ../modules/options.nix ];
+
+  assertions = [
+    {
+      assertion = !cfg.grafanaProxyAuth.enable || proxyAddress != null;
+      message = "homelab.observability.grafanaProxyAuth trusts Remote-User from homelab.reverseProxy.address, which is null.";
+    }
+  ];
 
   users.users.prometheus = {
     isSystemUser = true;
@@ -118,10 +126,27 @@ in
         "${grafanaAlerting}:/etc/grafana/provisioning/alerting/alerting.yaml:ro"
         "${cfg.dashboardsDir}:/etc/grafana/dashboards:ro"
       ];
-      # Single user on the tailnet: anonymous Admin access with no login form.
-      # The endpoint is only reachable over the tailnet (the reverse proxy
-      # binds to the tailnet IP), which is the access control here.
-      environment = {
+      environment = if cfg.grafanaProxyAuth.enable then {
+        # The tailnet user from Caddy's grafana_identity snippet, trusted only
+        # from Caddy's address; Grafana answers 401 to the header from
+        # anywhere else. Users are created on first sign in with the role
+        # Caddy passes in Remote-Role, Admin for every login it lets through.
+        GF_AUTH_PROXY_ENABLED = "true";
+        GF_AUTH_PROXY_HEADER_NAME = "Remote-User";
+        GF_AUTH_PROXY_HEADER_PROPERTY = "username";
+        GF_AUTH_PROXY_HEADERS = "Role:Remote-Role";
+        GF_AUTH_PROXY_WHITELIST = proxyAddress;
+        GF_AUTH_PROXY_AUTO_SIGN_UP = "true";
+        # No other way in: the built in admin still has the password admin
+        # unless someone changed it, so basic auth goes too. Service account
+        # tokens keep working.
+        GF_AUTH_ANONYMOUS_ENABLED = "false";
+        GF_AUTH_DISABLE_LOGIN_FORM = "true";
+        GF_AUTH_BASIC_ENABLED = "false";
+      } else {
+        # Single user on the tailnet: anonymous Admin access with no login
+        # form. The endpoint is only reachable over the tailnet (the reverse
+        # proxy binds to the tailnet IP), which is the access control here.
         GF_AUTH_ANONYMOUS_ENABLED = "true";
         GF_AUTH_ANONYMOUS_ORG_ROLE = "Admin";
         GF_AUTH_DISABLE_LOGIN_FORM = "true";

@@ -1,6 +1,6 @@
 # Creates Forgejo's first admin inside the forgejo container, once.
 #
-#   forgejo-admin <name> <email> <sign in URL>
+#   forgejo-admin <name> <email> <sign in URL> [<HTTP socket>]
 #
 # Waits until Forgejo answers its health endpoint, then lists the admins. If
 # there is none, it creates <name> with a random password that must be
@@ -9,24 +9,34 @@
 # the only place the password goes. If an admin exists it changes nothing.
 #
 # FORGEJO_ADMIN_TRIES (60) and FORGEJO_ADMIN_WAIT (5 seconds) set how long
-# it waits for Forgejo.
+# it waits for Forgejo. <HTTP socket> is the unix socket Forgejo listens on
+# in the container, when it does not listen on port 3000.
 
-if [ "$#" -ne 3 ]; then
-  echo "usage: forgejo-admin <name> <email> <sign in URL>" >&2
+if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
+  echo "usage: forgejo-admin <name> <email> <sign in URL> [<HTTP socket>]" >&2
   exit 2
 fi
 name=$1
 email=$2
 login_url=$3
+socket=${4:-}
 tries=${FORGEJO_ADMIN_TRIES:-60}
 delay=${FORGEJO_ADMIN_WAIT:-5}
 
-# The rootless image is Alpine, whose busybox has wget; HTTP is not
-# published on the host, so ask from inside the container.
+# HTTP is not published on the host, so ask from inside the container. The
+# rootless image is Alpine, whose busybox has wget; for the socket, which
+# busybox wget cannot use, it also has curl.
+if [ -n "$socket" ]; then
+  health=(curl -fsS -o /dev/null --unix-socket "$socket" http://unix/api/healthz)
+  where="$socket"
+else
+  health=(wget -q -O /dev/null http://127.0.0.1:3000/api/healthz)
+  where=http://127.0.0.1:3000/api/healthz
+fi
 try=1
-until podman exec forgejo wget -q -O /dev/null http://127.0.0.1:3000/api/healthz >/dev/null 2>&1; do
+until podman exec forgejo "${health[@]}" >/dev/null 2>&1; do
   if [ "$try" -ge "$tries" ]; then
-    echo "Forgejo did not answer on http://127.0.0.1:3000/api/healthz in the forgejo container after $tries tries; no admin created." >&2
+    echo "Forgejo did not answer on $where in the forgejo container after $tries tries; no admin created." >&2
     exit 1
   fi
   try=$((try + 1))

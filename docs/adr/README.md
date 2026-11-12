@@ -29,3 +29,6 @@ Status is one of:
   homelab.backups.jobs (Accepted)
 - [ADR-0003](0003-tailscale-identity-for-sign-in.md): Sign-in uses the
   Tailscale identity, looked up by Caddy through WhoIs (Accepted)
+- [ADR-0005](0005-proxy-auth-only-from-caddy.md): Services trust
+  Remote-User only from Caddy, by its fixed address or a socket only Caddy
+  mounts (Proposed)

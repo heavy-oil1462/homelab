@@ -63,10 +63,20 @@ Services (OCI containers, pinned by digest):
   with an `Authorization` header pass without an identity. It turns off
   tailscale's subnet-route SNAT, so don't enable it on a subnet router or
   exit node (docs/adr/0003-tailscale-identity-for-sign-in.md).
+  The caddy container has the fixed address `homelab.reverseProxy.address`
+  (10.88.255.2) on podman's default network. With Forgejo's or Grafana's
+  proxy authentication on, it also defines `forgejo_identity` and
+  `grafana_identity`, which include `tailnet_identity` and map the login to
+  the service's user (docs/adr/0005-proxy-auth-only-from-caddy.md).
 - `observability`: Prometheus, Loki, Grafana with provisioned datasources,
   dashboards and alerting. `examples/assets/grafana-alerting.yaml` alerts on
   failed units, failed or stale backups, full disks and hosts that are down,
-  through one placeholder contact point.
+  through one placeholder contact point. Grafana gives anyone who reaches
+  it anonymous Admin access, unless
+  `homelab.observability.grafanaProxyAuth.enable` is set: then only the
+  tailnet logins in `homelab.observability.grafanaProxyAuth.admins` sign in,
+  as Admin, through a status site that imports `grafana_identity`, and
+  Grafana trusts `Remote-User` only from Caddy's address.
 - `vaultwarden`, `homepage`, `homeassistant`.
 - `nextcloud`: Nextcloud All-in-One mastercontainer, pinned by digest. Its
   admin UI (8080) and the Apache container it starts (11000) bind to
@@ -107,6 +117,13 @@ Services (OCI containers, pinned by digest):
   itself up; add a backup job on the host, as `examples/server.nix` does:
   `homelab.backups.jobs.forgejo` with path `/var/lib/forgejo` and database
   `/var/lib/forgejo/data/gitea.db`.
+  With `homelab.forgejo.proxyAuth.enable`, the tailnet logins in
+  `homelab.forgejo.proxyAuth.users` sign in to the web UI as the Forgejo
+  user they map to, through a git site that imports `forgejo_identity`.
+  Users are not created on sign in. Forgejo then serves HTTP only on the
+  socket `/run/forgejo-http/http.sock`, which the caddy container mounts,
+  so the git site proxies to `unix//run/forgejo-http/http.sock` instead of
+  `forgejo:3000`. Tokens and git over SSH work as before.
 - `agent-sandbox`: a rootless podman sandbox for AI coding agents (Claude
   Code, Antigravity) with per-project state, shared gh/Claude auth, pinned
   commit identity, and an optional personal skills repo synced into every

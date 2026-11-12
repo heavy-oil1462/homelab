@@ -3,41 +3,10 @@
 # a tailnet user, a tagged node and an unknown address. Checks that forged
 # identity headers never reach the upstream and that requests with an
 # Authorization header skip the lookup.
-{ runCommand, writeText, caddy, curl, python3 }:
+{ runCommand, caddy, curl, python3 }:
 
 let
-  # Answers like cmd/nginx-auth: 204 with Tailscale-User for a user, 403 for
-  # a tagged node, 401 for an address WhoIs does not know. The mode comes
-  # from a file so one server covers all cases; each lookup is logged.
-  fakeAuth = writeText "fake-nginx-auth.py" ''
-    import http.server, os, socketserver, sys
-
-    sock, modefile, logfile = sys.argv[1:4]
-
-    class Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self):
-            with open(logfile, "a") as f:
-                f.write("%s %s\n" % (self.headers.get("Remote-Addr"), self.headers.get("Remote-Port")))
-            mode = open(modefile).read().strip()
-            if mode == "user":
-                self.send_response(204)
-                self.send_header("Tailscale-User", "alice@github")
-            else:
-                self.send_response(403 if mode == "tagged" else 401)
-            self.end_headers()
-
-        def address_string(self):
-            return "unix"
-
-    class Server(socketserver.UnixStreamServer):
-        def get_request(self):
-            conn, _ = super().get_request()
-            return conn, ("unix", 0)
-
-    if os.path.exists(sock):
-        os.remove(sock)
-    Server(sock, Handler).serve_forever()
-  '';
+  fakeAuth = ./fake-nginx-auth.py;
 in
 runCommand "tailnet-identity-test" { nativeBuildInputs = [ caddy curl python3 ]; } ''
   set -euo pipefail

@@ -139,6 +139,13 @@
         forgejo-admin = pkgs.callPackage ./tests/forgejo-admin.nix { };
         # The example Caddyfile's tailnet_identity snippet in a real Caddy.
         tailnet-identity = pkgs.callPackage ./tests/tailnet-identity.nix { };
+        # The identity snippets the reverse proxy generates for the example
+        # server, in a real Caddy. The Caddyfile is the store path the caddy
+        # container mounts; removeSuffix keeps its string context.
+        identity-mapping = pkgs.callPackage ./tests/identity-mapping.nix {
+          caddyfile = nixpkgs.lib.removeSuffix ":/etc/caddy/Caddyfile"
+            (builtins.head exampleServer.config.virtualisation.oci-containers.containers.caddy.volumes);
+        };
       };
     };
 }

@@ -1,5 +1,5 @@
 # Runs containers/forgejo-admin.sh against a stubbed podman: no admin yet,
-# an admin already there, and Forgejo not answering.
+# an admin already there, Forgejo not answering, and Forgejo on a socket.
 { runCommand, callPackage, runtimeShell }:
 
 let
@@ -62,6 +62,15 @@ runCommand "forgejo-admin-test" { } ''
   [ "$(grep -c healthz "$STUB_LOG")" -eq 3 ] || fail "down: expected 3 tries: $(cat "$STUB_LOG")"
   if grep -q "user" "$STUB_LOG"; then fail "down: went on past the health check"; fi
   grep -q "did not answer" err || fail "down: no clear error: $(cat err)"
+
+  # With proxy authentication Forgejo listens on a socket: the health check
+  # goes through it.
+  : > "$STUB_LOG"
+  ${script}/bin/forgejo-admin alice alice@example.com "$url" /run/forgejo-http/http.sock > out 2> err \
+    || { cat out err; fail "socket: failed"; }
+  grep -q -- "exec forgejo curl -fsS -o /dev/null --unix-socket /run/forgejo-http/http.sock http://unix/api/healthz" "$STUB_LOG" \
+    || fail "socket: health check not through the socket: $(cat "$STUB_LOG")"
+  grep -q "user create" "$STUB_LOG" || fail "socket: no admin created"
 
   echo ok > $out
 ''

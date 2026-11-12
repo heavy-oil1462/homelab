@@ -49,6 +49,10 @@
       lokiConfig = ./assets/loki-config.yaml;
       alertingConfig = ./assets/grafana-alerting.yaml;
       dashboardsDir = ./assets/dashboards;
+      grafanaProxyAuth = {
+        enable = true;
+        admins = [ "alice@example" ];
+      };
     };
     homepage = {
       settingsFile = ./assets/homepage/settings.yaml;
@@ -67,6 +71,10 @@
       admin = {
         name = "alice";
         email = "alice@example.com";
+      };
+      proxyAuth = {
+        enable = true;
+        users."alice@example" = "alice";
       };
     };
   };
