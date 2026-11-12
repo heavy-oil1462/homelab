@@ -27,3 +27,5 @@ Status is one of:
   the checks only (Accepted)
 - [ADR-0002](0002-generic-backup-jobs.md): Backups are declared per host as
   homelab.backups.jobs (Accepted)
+- [ADR-0003](0003-tailscale-identity-for-sign-in.md): Sign-in uses the
+  Tailscale identity, looked up by Caddy through WhoIs (Proposed)
