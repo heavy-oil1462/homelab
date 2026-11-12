@@ -1,4 +1,270 @@
-# Example Grafana alerting provisioning file for the observability module.
-# Add contact points and alert rules here; an empty apiVersion file is valid
-# and provisions nothing.
+# Example Grafana alerting provisioning file for the observability module
+# (homelab.observability.alertingConfig, mounted at
+# /etc/grafana/provisioning/alerting/alerting.yaml). Copy it into your config
+# repo and adapt it. Grafana reads it at startup; a rebuild with a changed
+# file restarts the grafana container. Rules, contact point and policy
+# provisioned here are read-only in the Grafana UI.
+#
+# The rules query the provisioned Prometheus datasource, whose uid is fixed to
+# "Prometheus" in containers/observability.nix. They need the node exporter
+# (modules/observability-agent.nix, systemd collector on) scraped as the job
+# "node-exporter", as in examples/assets/prometheus.yml.
+#
+# Severity labels: "critical" for lost backups and hosts that are down,
+# "warning" for the rest. The notification policy at the bottom groups the
+# two separately.
+#
+# Annotations are Go templates over the alert's labels ({{ $labels.name }})
+# and query values ({{ $values.A.Value }}); Grafana keeps them as written.
 apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: homelab
+    folder: Homelab
+    interval: 1m
+    rules:
+      # Any systemd unit in the failed state. Backup units are left out here
+      # and alert as critical in their own rule below.
+      - uid: homelab-unit-failed
+        title: Failed systemd unit
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                node_systemd_unit_state{state="failed", name!~"restic-backups-.*"} == 1
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        # No failed units means no series, which is fine.
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.name }} failed on {{ $labels.instance }}"
+          description: >-
+            Check it on the host with: systemctl status {{ $labels.name }}
+
+      # A restic backup run that failed (modules/backups.nix runs every job
+      # as the restic-backups-<name> unit). The unit stays failed until its
+      # next run succeeds.
+      - uid: homelab-backup-failed
+        title: Failed backup
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                node_systemd_unit_state{state="failed", name=~"restic-backups-.*"} == 1
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup {{ $labels.name }} failed on {{ $labels.instance }}"
+          description: >-
+            Check the run with: journalctl -u {{ $labels.name }}.
+            Restoring is described in docs/backups.md.
+
+      # A backup that has not run for 26 hours. node exporter has no "last
+      # successful run" metric, but its systemd collector exports each timer's
+      # last trigger time. A run that was triggered and failed is caught by
+      # "Failed backup" above, so together the two rules mean "no successful
+      # backup in 26h". 26h fits the default daily schedule with slack; raise
+      # it if a job runs less often (homelab.backups.jobs.<name>.schedule).
+      # A timer that never fired reports 0, so a new host alerts until the
+      # first run of each job.
+      - uid: homelab-backup-stale
+        title: Backup not run in 26h
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                time() - node_systemd_timer_last_trigger_seconds{name=~"restic-backups-.+\\.timer"}
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [93600] } # 26h in seconds
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup {{ $labels.name }} on {{ $labels.instance }} has not run in 26h"
+          description: >-
+            Check the timer with: systemctl list-timers 'restic-backups-*'
+
+      # Filesystem more than 90% full. tmpfs, overlay (container layers) and
+      # squashfs are left out. Frigate's /surveillance volume runs full by
+      # design (containers/nvr.nix: Frigate deletes old recordings as it
+      # fills), so it is excluded by mountpoint.
+      - uid: homelab-disk-full
+        title: Disk almost full
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs", mountpoint!="/surveillance"}
+                         / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs", mountpoint!="/surveillance"})
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [90] } # percent used
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.mountpoint }} on {{ $labels.instance }} is {{ humanize $values.A.Value }}% full"
+
+      # A node exporter target Prometheus cannot scrape: the host is down or
+      # unreachable over the tailnet.
+      - uid: homelab-host-down
+        title: Host down
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                up{job="node-exporter"}
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} is down"
+
+      # Certificate expiry needs a source first: nothing scraped here exposes
+      # TLS expiry (Caddy's metrics have no certificate expiry and are not
+      # scraped). With a blackbox exporter probing the sites, a rule like
+      # this one alerts 14 days before a certificate runs out:
+      #
+      # - uid: homelab-cert-expiry
+      #   title: Certificate expires soon
+      #   condition: C
+      #   data:
+      #     - refId: A
+      #       relativeTimeRange: { from: 600, to: 0 }
+      #       datasourceUid: Prometheus
+      #       model:
+      #         refId: A
+      #         instant: true
+      #         expr: |-
+      #           (probe_ssl_earliest_cert_expiry - time()) / 86400
+      #     - refId: C
+      #       datasourceUid: __expr__
+      #       model:
+      #         refId: C
+      #         type: threshold
+      #         expression: A
+      #         conditions:
+      #           - evaluator: { type: lt, params: [14] } # days left
+      #   noDataState: OK
+      #   execErrState: Error
+      #   for: 1h
+      #   labels:
+      #     severity: warning
+      #   annotations:
+      #     summary: "The certificate of {{ $labels.instance }} expires in {{ humanize $values.A.Value }} days"
+
+# One contact point for everything. Replace the URL with your own receiver;
+# the placeholder posts Grafana's webhook JSON to an ntfy topic, which ntfy
+# turns into a readable message with its built-in "grafana" template.
+#
+# Keep credentials out of this file (it ends up in the Nix store). Grafana
+# expands $__file{path} and $VAR in provisioning files, so a token can come
+# from a file provisioned out of band under /var/lib/secrets/, e.g.
+#
+#   authorization_scheme: Bearer
+#   authorization_credentials: $__file{/var/lib/secrets/grafana-ntfy-token}
+#
+# The file has to be mounted into the grafana container to be readable; the
+# observability module mounts nothing for it, so add the volume in your host
+# config.
+contactPoints:
+  - orgId: 1
+    name: homelab-default
+    receivers:
+      - uid: homelab-default-webhook
+        type: webhook
+        settings:
+          url: https://ntfy.example.com/homelab-alerts?template=grafana
+          httpMethod: POST
+        disableResolveMessage: false
+
+# Everything goes to homelab-default. Critical alerts get their own groups
+# (so they are never batched with warnings), a shorter wait and a shorter
+# repeat interval. This replaces Grafana's whole notification policy tree.
+policies:
+  - orgId: 1
+    receiver: homelab-default
+    group_by: [grafana_folder, alertname]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 12h
+    routes:
+      - receiver: homelab-default
+        object_matchers:
+          - [severity, "=", critical]
+        group_by: [grafana_folder, alertname, instance]
+        group_wait: 10s
+        group_interval: 1m
+        repeat_interval: 4h
