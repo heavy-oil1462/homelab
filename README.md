@@ -58,8 +58,12 @@ Services (OCI containers, pinned by digest):
   tailnet address only, which makes every site tailnet-only.
 - `observability`: Prometheus, Loki, Grafana with provisioned datasources,
   dashboards and alerting.
-- `vaultwarden`, `homepage`, `homeassistant`, `nvr` (Frigate), `nextcloud`
-  (AIO).
+- `vaultwarden`, `homepage`, `homeassistant`, `nextcloud` (AIO).
+- `nvr`: Frigate with GPU detection, recordings on `/surveillance`, state in
+  `/var/lib/frigate`. Camera credentials (FRIGATE_* variables the config
+  expands) come from `/var/lib/secrets/frigate.env`. Hosts that still have
+  the old `/etc/secrets/frigate.env` get it copied over on the next start;
+  remove the old file once Frigate works.
 - `unifi`: UniFi Network controller (linuxserver image) with its own
   MongoDB container (auth enabled). Expects MONGO_INITDB_ROOT_USERNAME,
   MONGO_INITDB_ROOT_PASSWORD, MONGO_USER and MONGO_PASS in
@@ -107,9 +111,29 @@ System:
   `tailscale`, `logging-agent`, `observability-agent`, and the desktop
   modules.
 
+## Secrets
+
 Secrets are never part of the configuration: modules reference runtime paths
-under `/var/lib/secrets/` (Cloudflare token, restic password, HA token,
-camera credentials) that you provision on the host out of band.
+under `/var/lib/secrets/` that you provision on the host out of band. For the
+files containers read, a tmpfiles rule creates an empty file with the right
+owner and mode if none exists, so a missing secret never stops podman from
+starting a container or makes it create a directory in the file's place.
+
+| File | Read by | Owner, mode | When empty or missing |
+| --- | --- | --- | --- |
+| `frigate.env` | `nvr` | root, 0400 | Frigate cannot expand the camera credentials in its config; no camera connects |
+| `unifi.env` | `unifi` | root, 0400 | `unifi-db` refuses to start (MongoDB would run without auth), so `unifi` does not start |
+| `homeassistant-secrets.yaml` | `homeassistant` | root, 0400 | Home Assistant starts; config that uses `!secret` does not load |
+| `ha-prometheus-token` | `observability` | prometheus, 0640 | Prometheus runs; the home-assistant scrape fails with 401 |
+| `registry.htpasswd` | `registry` | registry, 0400 | the registry refuses to start, naming the file |
+| `forgejo-secret-key` | `forgejo` | forgejo, 0400 | Forgejo refuses to start |
+| `cloudflare.env` | `acme` | root | certificate renewal fails |
+| `restic-password`, `rclone.env` | `backups` | root | backups fail |
+| `tailscale-authkey` | `tailscale` | root | not needed once the host is on the tailnet; deleted after use |
+
+The last three are read by NixOS services, not containers, and get no
+tmpfiles rule: missing, their units fail the same way they would with an
+empty file, and the Tailscale key must stay absent once used.
 
 ## Static user ids
 

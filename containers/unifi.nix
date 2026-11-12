@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   # Runs only on the first start, when /data/db is still empty; the mongo
@@ -46,16 +46,23 @@ in
     gid = 988;
   };
 
+  # Both containers expect /var/lib/secrets/unifi.env on the host, provisioned
+  # out of band (never committed), root:root 0400 (podman reads it as root),
+  # containing MONGO_INITDB_ROOT_USERNAME, MONGO_INITDB_ROOT_PASSWORD,
+  # MONGO_USER and MONGO_PASS. Keep the passwords alphanumeric: they are
+  # interpolated into JavaScript strings in the init script and into the
+  # mongo connection URI built by the image.
+  #
+  # The f rule creates the file empty if it is missing, so podman never fails
+  # on a missing env file. The mongo image only turns on auth when the root
+  # credentials are set, so without them mongod would run open; unifi-db's
+  # preStart refuses to start until they are there.
   systemd.tmpfiles.rules = [
     "d /var/lib/unifi 0750 unifi unifi -"
     "d /var/lib/unifi-db 0700 unifi-db unifi-db -"
+    "f /var/lib/secrets/unifi.env 0400 root root -"
   ];
 
-  # Both containers expect /var/lib/secrets/unifi.env on the host, provisioned
-  # out of band (never committed), containing MONGO_INITDB_ROOT_USERNAME,
-  # MONGO_INITDB_ROOT_PASSWORD, MONGO_USER and MONGO_PASS. Keep the passwords
-  # alphanumeric: they are interpolated into JavaScript strings in the init
-  # script and into the mongo connection URI built by the image.
   virtualisation.oci-containers.containers = {
     # MongoDB for the UniFi application, on the default podman bridge.
     # Setting the root credentials switches the image into auth mode, which
@@ -124,4 +131,13 @@ in
   # not exhaust the unifi unit's start rate limit and leave it failed for
   # good; same pattern as the reverse proxy waiting for tailscaled.
   systemd.services.podman-unifi.startLimitIntervalSec = 0;
+
+  systemd.services.podman-unifi-db.preStart = lib.mkBefore ''
+    for var in MONGO_INITDB_ROOT_USERNAME MONGO_INITDB_ROOT_PASSWORD; do
+      if ! grep -q "^$var=." /var/lib/secrets/unifi.env; then
+        echo "/var/lib/secrets/unifi.env does not set $var; refusing to start MongoDB without auth." >&2
+        exit 1
+      fi
+    done
+  '';
 }

@@ -22,9 +22,17 @@ in
   # (frigate.db plus model cache) lives on the root disk. The SQLite database
   # must not share a filesystem that runs at 100% by design; a full disk during
   # a write is how the recording index gets corrupted.
+  #
+  # Camera credentials (FRIGATE_RTSP_PASSWORD and any other FRIGATE_*
+  # variables the config expands) come from /var/lib/secrets/frigate.env,
+  # provisioned out of band, root:root 0400; podman reads it as root. The f
+  # rule creates it empty if it is missing, so podman never fails on a missing
+  # env file. With it empty Frigate cannot expand the variables in the config
+  # and no camera connects; nothing is exposed that was not before.
   systemd.tmpfiles.rules = [
     "d /surveillance/media 0750 frigate frigate -"
     "d /var/lib/frigate 0750 frigate frigate -"
+    "f /var/lib/secrets/frigate.env 0400 root root -"
   ];
 
   virtualisation.oci-containers.containers = {
@@ -44,7 +52,7 @@ in
         "/var/lib/frigate:/config"
         "${frigateConfig}:/config/config.yaml"
       ];
-      environmentFiles = [ "/etc/secrets/frigate.env" ];
+      environmentFiles = [ "/var/lib/secrets/frigate.env" ];
     };
   };
 
@@ -59,5 +67,12 @@ in
       rm -f /var/lib/frigate/config.yaml
     fi
     chown -R 990:990 /surveillance/media /var/lib/frigate
+    # One-time migration of the env file from its old location. The f rule
+    # above may already have created the new file empty, so empty counts as
+    # missing. The old file is left in place to be removed by hand.
+    if [ ! -s /var/lib/secrets/frigate.env ] && [ -e /etc/secrets/frigate.env ]; then
+      install -D -m 0400 -o root -g root /etc/secrets/frigate.env /var/lib/secrets/frigate.env
+      echo "Copied /etc/secrets/frigate.env to /var/lib/secrets/frigate.env; remove the old file once Frigate works." >&2
+    fi
   '';
 }

@@ -1,4 +1,4 @@
-{ config, ... }:
+{ config, lib, ... }:
 
 # Private OCI image registry (the Docker Official Image of CNCF Distribution).
 # It listens on the podman bridge only; publish it through the reverse proxy,
@@ -21,8 +21,10 @@
 #   chown registry:registry /var/lib/secrets/registry.htpasswd
 #   chmod 0400 /var/lib/secrets/registry.htpasswd
 #
-# The container fails to start while the file is missing, so the registry
-# never comes up open.
+# A tmpfiles rule creates the file empty if it is missing, so podman never
+# makes a directory at the mount's source, and the unit refuses to start
+# while it is empty, naming the file. An empty htpasswd has no users, so
+# the registry would be of no use, and it never comes up open.
 
 {
   imports = [ ../modules/options.nix ];
@@ -40,7 +42,15 @@
 
   systemd.tmpfiles.rules = [
     "d /var/lib/registry 0750 registry registry -"
+    "f /var/lib/secrets/registry.htpasswd 0400 registry registry -"
   ];
+
+  systemd.services.podman-registry.preStart = lib.mkBefore ''
+    if [ ! -s /var/lib/secrets/registry.htpasswd ]; then
+      echo "/var/lib/secrets/registry.htpasswd is empty; refusing to start the registry without users." >&2
+      exit 1
+    fi
+  '';
 
   virtualisation.oci-containers.containers.registry = {
     image = "docker.io/library/registry@sha256:38907510915c3f1604c7e83d6ab602ab3020d092f73bdaed8696773693ff768c"; # 3.1.2, :3 as of 2026-11-07
