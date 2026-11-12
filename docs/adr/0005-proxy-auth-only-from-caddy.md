@@ -1,6 +1,6 @@
 # ADR-0005: Services trust Remote-User only from Caddy, by its fixed address or a socket only Caddy mounts
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 
