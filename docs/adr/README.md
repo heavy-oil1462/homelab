@@ -31,3 +31,6 @@ Status is one of:
   Tailscale identity, looked up by Caddy through WhoIs (Accepted)
 - [ADR-0004](0004-probe-targets-through-file-sd.md): Probe targets reach
   Prometheus through file_sd (Accepted)
+- [ADR-0005](0005-proxy-auth-only-from-caddy.md): Services trust
+  Remote-User only from Caddy, by its fixed address or a socket only Caddy
+  mounts (Accepted)

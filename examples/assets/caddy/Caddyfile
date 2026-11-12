@@ -54,13 +54,23 @@ registry.__DOMAIN__:443 {
 
 # Forgejo's web UI and API. Git over SSH bypasses Caddy: the forgejo module
 # publishes it on the tailnet address, port 2222.
+# forgejo_identity (generated from homelab.forgejo.proxyAuth.users, and
+# including tailnet_identity) signs the tailnet user in. With
+# homelab.forgejo.proxyAuth on, Forgejo listens only on this socket; without
+# it, drop the import and use reverse_proxy forgejo:3000.
 git.__DOMAIN__:443 {
 	import site_tls
-	reverse_proxy forgejo:3000
+	import forgejo_identity
+	reverse_proxy unix//run/forgejo-http/http.sock
 }
 
+# grafana_identity (generated from homelab.observability.grafanaProxyAuth,
+# and including tailnet_identity) signs the listed tailnet users in as
+# admins. Without the option, drop the import: Grafana is then open to
+# anyone who reaches it, as Admin.
 status.__DOMAIN__:443 {
 	import site_tls
+	import grafana_identity
 	reverse_proxy grafana:3000
 }
 

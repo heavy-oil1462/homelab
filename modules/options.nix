@@ -2,6 +2,11 @@
 
 let
   cfg = config.homelab;
+
+  # A tailnet login name as Tailscale reports it: alice@github,
+  # alice@example.com. Restricted to characters that need no quoting in the
+  # Caddyfile snippets built from them.
+  tailnetLogin = lib.types.strMatching "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+";
 in
 {
   options.homelab = {
@@ -257,6 +262,20 @@ in
           tailnet range back to it (docs/adr/0003-tailscale-identity-for-sign-in.md).
         '';
       };
+      address = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = "10.88.255.2";
+        example = null;
+        description = ''
+          Fixed address of the caddy container on podman's default network
+          (10.88.0.0/16), given to podman as --ip. Services that take
+          Remote-User from Caddy, like Grafana with
+          homelab.observability.grafanaProxyAuth, trust only this address.
+          The default sits high in the range, clear of the addresses podman
+          hands out in order. Null lets podman pick one, which the proxy
+          authentication options refuse.
+        '';
+      };
     };
 
     observability = {
@@ -290,6 +309,33 @@ in
           /etc/prometheus/probe-targets.json (file_sd); the blackbox job in
           prometheus.yml points at it.
         '';
+      };
+      grafanaProxyAuth = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Sign in to Grafana with the tailnet identity Caddy passes as
+            Remote-User, from homelab.reverseProxy.address only, and turn off
+            anonymous access, password logins and basic auth. Grafana creates
+            the user on first sign in. The status site imports
+            `grafana_identity`, which the reverse proxy generates from
+            homelab.observability.grafanaProxyAuth.admins
+            (docs/adr/0005-proxy-auth-only-from-caddy.md). Off, Grafana keeps
+            anonymous access with the Admin role, so anyone who reaches it is
+            an admin.
+          '';
+        };
+        admins = lib.mkOption {
+          type = lib.types.listOf tailnetLogin;
+          default = [ ];
+          example = [ "alice@github" ];
+          description = ''
+            Tailnet logins that sign in to Grafana, all with the Admin role
+            in the main organisation. Caddy passes no identity for anyone
+            else, so they get no access.
+          '';
+        };
       };
     };
 
@@ -393,6 +439,34 @@ in
           default = null;
           example = "alice@example.com";
           description = "Email address of Forgejo's first admin; see homelab.forgejo.admin.name.";
+        };
+      };
+      proxyAuth = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Sign in to Forgejo's web UI with the tailnet identity Caddy
+            passes as Remote-User. Forgejo does not check where that header
+            comes from, so its HTTP moves from port 3000 on the podman
+            network to the unix socket /run/forgejo-http/http.sock, which
+            only the caddy container mounts; the git site's reverse_proxy
+            must point there. Only existing users sign in this way, with the
+            name homelab.forgejo.proxyAuth.users maps the login to; the git
+            site imports `forgejo_identity`, which the reverse proxy
+            generates from it (docs/adr/0005-proxy-auth-only-from-caddy.md).
+            Tokens over HTTPS and git over SSH work as before.
+          '';
+        };
+        users = lib.mkOption {
+          type = lib.types.attrsOf (lib.types.strMatching "[A-Za-z0-9._-]+");
+          default = { };
+          example = { "alice@github" = "alice"; };
+          description = ''
+            Tailnet login to Forgejo user name, for the users that may sign
+            in with their tailnet identity. Keys are tailnet logins
+            (alice@github). Caddy passes no identity for logins not listed.
+          '';
         };
       };
     };

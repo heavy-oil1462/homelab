@@ -56,6 +56,10 @@
         "https://vault.home.example.com"
         "https://status.home.example.com/api/health"
       ];
+      grafanaProxyAuth = {
+        enable = true;
+        admins = [ "alice@example" ];
+      };
     };
     homepage = {
       settingsFile = ./assets/homepage/settings.yaml;
@@ -74,6 +78,10 @@
       admin = {
         name = "alice";
         email = "alice@example.com";
+      };
+      proxyAuth = {
+        enable = true;
+        users."alice@example" = "alice";
       };
     };
   };
