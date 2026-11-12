@@ -27,3 +27,5 @@ Status is one of:
   the checks only (Accepted)
 - [ADR-0002](0002-generic-backup-jobs.md): Backups are declared per host as
   homelab.backups.jobs (Accepted)
+- [ADR-0003](0003-probe-targets-through-file-sd.md): Probe targets reach
+  Prometheus through file_sd (Proposed)

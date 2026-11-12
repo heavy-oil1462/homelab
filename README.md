@@ -57,9 +57,14 @@ Services (OCI containers, pinned by digest):
 - `reverse-proxy`: Caddy. With `homelab.tailnetIp` set, 443 binds to the
   tailnet address only, which makes every site tailnet-only.
 - `observability`: Prometheus, Loki, Grafana with provisioned datasources,
-  dashboards and alerting. `examples/assets/grafana-alerting.yaml` alerts on
-  failed units, failed or stale backups, full disks and hosts that are down,
-  through one placeholder contact point.
+  dashboards and alerting. A blackbox exporter on the host probes the HTTPS
+  URLs in `homelab.observability.probeTargets` through Caddy, as clients
+  reach them; it listens on the podman bridge only. The host must resolve the
+  site names to Caddy's tailnet address (with Tailscale DNS, a split-DNS
+  record for the domain). `examples/assets/grafana-alerting.yaml` alerts on
+  failed units, failed or stale backups, full disks, hosts that are down,
+  certificates that expire within 14 days and sites that are down or serve
+  an invalid certificate, through one placeholder contact point.
 - `vaultwarden`, `homepage`, `homeassistant`.
 - `nextcloud`: Nextcloud All-in-One mastercontainer, pinned by digest. Its
   admin UI (8080) and the Apache container it starts (11000) bind to
