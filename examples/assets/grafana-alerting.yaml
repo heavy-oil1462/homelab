@@ -8,7 +8,9 @@
 # The rules query the provisioned Prometheus datasource, whose uid is fixed to
 # "Prometheus" in containers/observability.nix. They need the node exporter
 # (modules/observability-agent.nix, systemd collector on) scraped as the job
-# "node-exporter", as in examples/assets/prometheus.yml.
+# "node-exporter", as in examples/assets/prometheus.yml. The certificate and
+# site rules need the blackbox exporter (containers/observability.nix)
+# scraped as the job "blackbox", also as in that file.
 #
 # Severity labels: "critical" for lost backups and hosts that are down,
 # "warning" for the rest. The notification policy at the bottom groups the
@@ -192,38 +194,79 @@ groups:
         annotations:
           summary: "{{ $labels.instance }} is down"
 
-      # Certificate expiry needs a source first: nothing scraped here exposes
-      # TLS expiry (Caddy's metrics have no certificate expiry and are not
-      # scraped). With a blackbox exporter probing the sites, a rule like
-      # this one alerts 14 days before a certificate runs out:
-      #
-      # - uid: homelab-cert-expiry
-      #   title: Certificate expires soon
-      #   condition: C
-      #   data:
-      #     - refId: A
-      #       relativeTimeRange: { from: 600, to: 0 }
-      #       datasourceUid: Prometheus
-      #       model:
-      #         refId: A
-      #         instant: true
-      #         expr: |-
-      #           (probe_ssl_earliest_cert_expiry - time()) / 86400
-      #     - refId: C
-      #       datasourceUid: __expr__
-      #       model:
-      #         refId: C
-      #         type: threshold
-      #         expression: A
-      #         conditions:
-      #           - evaluator: { type: lt, params: [14] } # days left
-      #   noDataState: OK
-      #   execErrState: Error
-      #   for: 1h
-      #   labels:
-      #     severity: warning
-      #   annotations:
-      #     summary: "The certificate of {{ $labels.instance }} expires in {{ humanize $values.A.Value }} days"
+      # A site whose certificate runs out within 14 days. The blackbox
+      # exporter (containers/observability.nix) probes the URLs in
+      # homelab.observability.probeTargets through Caddy, as clients reach
+      # them, and reports the earliest expiry in the chain it was served.
+      # A site whose certificate is already invalid has no expiry series;
+      # "Site down or certificate invalid" below catches it.
+      - uid: homelab-cert-expiry
+        title: Certificate expires soon
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                (probe_ssl_earliest_cert_expiry{job="blackbox"} - time()) / 86400
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [14] } # days left
+        noDataState: OK
+        execErrState: Error
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "The certificate of {{ $labels.instance }} expires in {{ humanize $values.A.Value }} days"
+          description: >-
+            The acme module renews certificates well before this, so renewal
+            has been failing; check it with: journalctl -u 'acme-*'
+
+      # A probed site that does not answer 2xx over valid TLS: Caddy or the
+      # service behind it is down, the name does not resolve from the
+      # observability host, or the certificate is expired or untrusted.
+      # "or up" makes a blackbox exporter that cannot be scraped alert for
+      # every site too, instead of leaving the rule without data.
+      - uid: homelab-probe-failed
+        title: Site down or certificate invalid
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                probe_success{job="blackbox"} or up{job="blackbox"}
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }} is down or its certificate is invalid"
+          description: >-
+            See why in Prometheus: probe_http_status_code and
+            probe_failed_due_to_regex, or on the observability host with
+            curl -v {{ $labels.instance }}
 
 # One contact point for everything. Replace the URL with your own receiver;
 # the placeholder posts Grafana's webhook JSON to an ntfy topic, which ntfy

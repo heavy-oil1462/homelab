@@ -69,10 +69,15 @@ Services (OCI containers, pinned by digest):
   `grafana_identity`, which include `tailnet_identity` and map the login to
   the service's user (docs/adr/0005-proxy-auth-only-from-caddy.md).
 - `observability`: Prometheus, Loki, Grafana with provisioned datasources,
-  dashboards and alerting. `examples/assets/grafana-alerting.yaml` alerts on
-  failed units, failed or stale backups, full disks and hosts that are down,
-  through one placeholder contact point. Grafana gives anyone who reaches
-  it anonymous Admin access, unless
+  dashboards and alerting. A blackbox exporter on the host probes the HTTPS
+  URLs in `homelab.observability.probeTargets` through Caddy, as clients
+  reach them; it listens on the podman bridge only. The host must resolve the
+  site names to Caddy's tailnet address (with Tailscale DNS, a split-DNS
+  record for the domain). `examples/assets/grafana-alerting.yaml` alerts on
+  failed units, failed or stale backups, full disks, hosts that are down,
+  certificates that expire within 14 days and sites that are down or serve
+  an invalid certificate, through one placeholder contact point. Grafana
+  gives anyone who reaches it anonymous Admin access, unless
   `homelab.observability.grafanaProxyAuth.enable` is set: then only the
   tailnet logins in `homelab.observability.grafanaProxyAuth.admins` sign in,
   as Admin, through a status site that imports `grafana_identity`, and

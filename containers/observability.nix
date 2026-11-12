@@ -37,6 +37,34 @@ let
     builtins.readFile cfg.alertingConfig
   );
 
+  # Probes for homelab.observability.probeTargets. http_2xx_tls is an HTTPS
+  # GET that fails on anything but a 2xx answer over TLS with a certificate
+  # the host trusts, so probe_success covers "down" and "invalid
+  # certificate", and probe_ssl_earliest_cert_expiry gives the expiry. IPv4
+  # because Caddy publishes 443 on the tailnet IPv4 address only.
+  blackboxConfig = pkgs.writeText "blackbox.yml" ''
+    modules:
+      http_2xx_tls:
+        prober: http
+        timeout: 10s
+        http:
+          method: GET
+          fail_if_not_ssl: true
+          preferred_ip_protocol: ip4
+          ip_protocol_fallback: false
+  '';
+
+  # The targets as a file_sd file, so the blackbox job in the consumer's
+  # prometheus.yml reads them from the option instead of repeating them.
+  probeTargets = pkgs.writeText "probe-targets.json" (builtins.toJSON [
+    { targets = cfg.probeTargets; }
+  ]);
+
+  # The default podman network's bridge, as the NixOS podman module defines
+  # it. The Prometheus container reaches the host's blackbox exporter here.
+  podmanBridge = "podman0";
+  podmanGateway = "10.88.0.1";
+
   grafanaDashboards = pkgs.writeText "dashboards.yml" ''
     apiVersion: 1
     providers:
@@ -90,6 +118,31 @@ in
     "f /var/lib/secrets/ha-prometheus-token 0640 prometheus prometheus -"
   ];
 
+  # The blackbox exporter runs on the host, next to Prometheus, so the sites
+  # are probed once, from the host that alerts on them. It listens on the
+  # podman bridge only and the port is open on that interface only, like
+  # aardvark-dns on 53: containers on the default network reach it, nothing
+  # on the LAN or the tailnet does.
+  services.prometheus.exporters.blackbox = {
+    enable = true;
+    listenAddress = podmanGateway;
+    port = 9115;
+    configFile = blackboxConfig;
+  };
+
+  # The bridge address exists once podman has started a container on the
+  # default network. Start after Prometheus, and keep retrying (rather than
+  # hitting the start limit) if the bridge is not up yet.
+  systemd.services.prometheus-blackbox-exporter = {
+    after = [ "podman-prometheus.service" ];
+    serviceConfig.RestartSec = "5s";
+    unitConfig.StartLimitIntervalSec = 0;
+  };
+
+  networking.firewall.interfaces.${podmanBridge}.allowedTCPPorts = [
+    config.services.prometheus.exporters.blackbox.port
+  ];
+
   virtualisation.oci-containers.containers = {
     prometheus = {
       image = "docker.io/prom/prometheus@sha256:69f5241418838263316593f7274a304b095c40bcf22e57272865da91bd60a8ac"; # :latest as of 2026-06-13
@@ -102,6 +155,7 @@ in
         # Runtime secret, never committed; provision it out of band and make
         # it readable by the prometheus container uid.
         "/var/lib/secrets/ha-prometheus-token:/etc/prometheus/ha-token:ro"
+        "${probeTargets}:/etc/prometheus/probe-targets.json:ro"
       ];
     };
 

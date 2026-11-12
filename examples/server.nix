@@ -49,6 +49,13 @@
       lokiConfig = ./assets/loki-config.yaml;
       alertingConfig = ./assets/grafana-alerting.yaml;
       dashboardsDir = ./assets/dashboards;
+      # Sites behind Caddy, probed for availability and certificate expiry.
+      # Each must answer 2xx (Grafana's /api/health does; Loki's / is a 404).
+      probeTargets = [
+        "https://start.home.example.com"
+        "https://vault.home.example.com"
+        "https://status.home.example.com/api/health"
+      ];
       grafanaProxyAuth = {
         enable = true;
         admins = [ "alice@example" ];
