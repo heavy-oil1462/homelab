@@ -242,6 +242,21 @@ in
         type = lib.types.path;
         description = "Static 404 page served by Caddy.";
       };
+      tailscaleIdentity.enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Let Caddy look up the tailnet user behind each request, so sites
+          that `import tailnet_identity` (see the example Caddyfile) pass the
+          login name (`alice@github`) to their upstream as `Remote-User`.
+          Runs tailscale's nginx-auth WhoIs helper on a unix socket that the
+          caddy container mounts, and turns off tailscale's source NAT of
+          forwarded traffic (`tailscale set --snat-subnet-routes=false`) so
+          Caddy sees the tailnet client address. Do not enable on a host
+          that is a subnet router or exit node unless its LAN routes the
+          tailnet range back to it (docs/adr/0003-tailscale-identity-for-sign-in.md).
+        '';
+      };
     };
 
     observability = {

@@ -10,6 +10,33 @@
 	tls /certs/fullchain.pem /certs/key.pem
 }
 
+# Passes the tailnet user to the upstream as Remote-User (the login name, e.g.
+# alice@github). Needs homelab.reverseProxy.tailscaleIdentity.enable, which
+# provides the WhoIs socket; the host refuses to build without it.
+# Import it at the top of a site block, before reverse_proxy (inside each
+# handle block, if the site has them). The route keeps the steps in order:
+#  - Remote-User and Tailscale-* headers from the client are always deleted.
+#  - A request with an Authorization header skips the lookup and reaches the
+#    service without an identity, so tokens keep working from tagged nodes.
+#  - Otherwise WhoIs on the client address sets Remote-User. A tagged node
+#    (403) or a non-tailnet address (401) gets no identity and the request
+#    goes on, so the service shows its own sign-in.
+(tailnet_identity) {
+	route {
+		request_header -Remote-User
+		request_header -Tailscale-*
+		@tailnet_identity_no_token not header Authorization *
+		forward_auth @tailnet_identity_no_token unix//run/tailnet-identity/whois.sock {
+			uri /auth
+			header_up Remote-Addr {remote_host}
+			header_up Remote-Port {remote_port}
+			copy_headers Tailscale-User>Remote-User
+			@tailnet_identity_no_user status 401 403
+			handle_response @tailnet_identity_no_user
+		}
+	}
+}
+
 start.__DOMAIN__:443 {
 	import site_tls
 	reverse_proxy homepage:3000
@@ -45,6 +72,13 @@ metrics.__DOMAIN__:443 {
 logs.__DOMAIN__:443 {
 	import site_tls
 	reverse_proxy loki:3100
+}
+
+# Echoes the identity Caddy passes on, to test tailnet_identity by hand.
+whoami.__DOMAIN__:443 {
+	import site_tls
+	import tailnet_identity
+	respond "Remote-User: {header.Remote-User}"
 }
 
 # A device on the LAN, outside podman, by IP.

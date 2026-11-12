@@ -56,6 +56,13 @@ Services (OCI containers, pinned by digest):
 
 - `reverse-proxy`: Caddy. With `homelab.tailnetIp` set, 443 binds to the
   tailnet address only, which makes every site tailnet-only.
+  With `homelab.reverseProxy.tailscaleIdentity.enable`, sites that
+  `import tailnet_identity` (example Caddyfile) pass the tailnet user's login
+  name to their upstream as `Remote-User`, looked up through tailscale's
+  nginx-auth. Client-sent identity headers are always deleted, and requests
+  with an `Authorization` header pass without an identity. It turns off
+  tailscale's subnet-route SNAT, so don't enable it on a subnet router or
+  exit node (docs/adr/0003-tailscale-identity-for-sign-in.md).
 - `observability`: Prometheus, Loki, Grafana with provisioned datasources,
   dashboards and alerting. A blackbox exporter on the host probes the HTTPS
   URLs in `homelab.observability.probeTargets` through Caddy, as clients

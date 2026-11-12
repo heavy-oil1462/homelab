@@ -42,6 +42,7 @@
     reverseProxy = {
       caddyfile = ./assets/caddy/Caddyfile;
       notFoundPage = ./assets/caddy/404.html;
+      tailscaleIdentity.enable = true;
     };
     observability = {
       prometheusConfig = ./assets/prometheus.yml;

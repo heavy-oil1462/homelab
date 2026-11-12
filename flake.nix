@@ -137,6 +137,8 @@
           (builtins.unsafeDiscardStringContext exampleVm.config.system.build.toplevel.drvPath);
         # The forgejo-admin unit's script against a stubbed podman.
         forgejo-admin = pkgs.callPackage ./tests/forgejo-admin.nix { };
+        # The example Caddyfile's tailnet_identity snippet in a real Caddy.
+        tailnet-identity = pkgs.callPackage ./tests/tailnet-identity.nix { };
       };
     };
 }
