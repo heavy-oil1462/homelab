@@ -1,5 +1,6 @@
 # ADR-0003: Sign-in uses the Tailscale identity, looked up by Caddy through WhoIs
-Status: Proposed
+
+Status: Accepted
 
 ## Context
 
