@@ -1,6 +1,7 @@
 # Example Prometheus config for the observability module. Targets use
 # RFC 5737 documentation addresses; replace them with your hosts' tailnet IPs
 # or names. node_exporter comes from the observability-agent module (port 9100).
+# The blackbox exporter comes from the observability module (port 9115).
 global:
   scrape_interval: 30s
 
@@ -23,3 +24,24 @@ scrape_configs:
       credentials_file: /etc/prometheus/ha-token
     static_configs:
       - targets: ["192.0.2.22:8123"]
+
+  # Availability and certificate expiry of the sites behind Caddy. The URLs
+  # come from homelab.observability.probeTargets, which the observability
+  # module writes to /etc/prometheus/probe-targets.json; list sites there,
+  # not here. The blackbox exporter runs on the host and listens on the
+  # default podman network's gateway, 10.88.0.1, which the Prometheus
+  # container reaches. The relabeling passes each URL as the probe's target
+  # and keeps it as the instance label.
+  - job_name: blackbox
+    metrics_path: /probe
+    params:
+      module: [http_2xx_tls]
+    file_sd_configs:
+      - files: [/etc/prometheus/probe-targets.json]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: "10.88.0.1:9115"

@@ -276,6 +276,21 @@ in
         type = lib.types.path;
         description = "Directory of Grafana dashboard JSON files, provisioned read-only.";
       };
+      probeTargets = lib.mkOption {
+        type = lib.types.listOf (lib.types.strMatching "https://.+");
+        default = [ ];
+        example = [ "https://vault.example.com" "https://status.example.com/api/health" ];
+        description = ''
+          HTTPS URLs the blackbox exporter probes with its http_2xx_tls
+          module, the way clients reach them. A probe fails on a non-2xx
+          answer or an invalid certificate, and reports the certificate's
+          expiry. The host running the observability module must resolve
+          each name to the address clients use (Caddy's tailnet address).
+          Prometheus reads the list from
+          /etc/prometheus/probe-targets.json (file_sd); the blackbox job in
+          prometheus.yml points at it.
+        '';
+      };
     };
 
     homeassistant = {

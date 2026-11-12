@@ -29,3 +29,5 @@ Status is one of:
   homelab.backups.jobs (Accepted)
 - [ADR-0003](0003-tailscale-identity-for-sign-in.md): Sign-in uses the
   Tailscale identity, looked up by Caddy through WhoIs (Accepted)
+- [ADR-0004](0004-probe-targets-through-file-sd.md): Probe targets reach
+  Prometheus through file_sd (Accepted)
