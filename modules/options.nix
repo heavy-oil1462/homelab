@@ -294,6 +294,22 @@ in
       };
     };
 
+    nextcloud = {
+      bindAddress = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = cfg.tailnetIp;
+        defaultText = lib.literalExpression "config.homelab.tailnetIp";
+        example = "192.0.2.10";
+        description = ''
+          Host address the Nextcloud AIO admin UI (port 8080) and its Apache
+          container (APACHE_PORT, 11000) listen on. Defaults to the tailnet
+          address, which keeps Nextcloud tailnet-only; set a LAN address, or
+          "0.0.0.0", to opt in to LAN access. The module refuses to evaluate
+          while it is null rather than listen on every interface.
+        '';
+      };
+    };
+
     forgejo = {
       sshPort = lib.mkOption {
         type = lib.types.port;
