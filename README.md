@@ -60,7 +60,13 @@ Services (OCI containers, pinned by digest):
   dashboards and alerting. `examples/assets/grafana-alerting.yaml` alerts on
   failed units, failed or stale backups, full disks and hosts that are down,
   through one placeholder contact point.
-- `vaultwarden`, `homepage`, `homeassistant`, `nextcloud` (AIO).
+- `vaultwarden`, `homepage`, `homeassistant`.
+- `nextcloud`: Nextcloud All-in-One mastercontainer, pinned by digest. Its
+  admin UI (8080) and the Apache container it starts (11000) bind to
+  `homelab.nextcloud.bindAddress`, the tailnet address by default. To reach
+  them from the LAN, set it to a LAN address (or `"0.0.0.0"`) and open the
+  ports in the host's firewall. AIO updates the containers it manages from
+  its UI when you ask it to; the AIO version itself changes with the pin.
 - `nvr`: Frigate with GPU detection, recordings on `/surveillance`, state in
   `/var/lib/frigate`. Camera credentials (FRIGATE_* variables the config
   expands) come from `/var/lib/secrets/frigate.env`. Hosts that still have
