@@ -16,6 +16,8 @@ let
   cfg = config.homelab.nextcloud;
 in
 {
+  imports = [ ../modules/options.nix ];
+
   assertions = [
     {
       assertion = cfg.bindAddress != null;
