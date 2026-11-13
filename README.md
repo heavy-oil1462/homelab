@@ -202,6 +202,13 @@ any domain.
 `nix flake check` deep-evaluates the two example hosts down to derivation
 paths, which catches option and type errors without building full systems.
 
+## CI
+
+`.forgejo/workflows/check.yml` runs
+`nix flake check --no-update-lock-file --show-trace` in Forgejo Actions on
+every push to any branch and on pull requests, in a digest-pinned `nixos/nix`
+container.
+
 ## Deploy TUI
 
 `nix run .#deploy` starts a small fzf picker over `scripts/deploy/*.sh` in
