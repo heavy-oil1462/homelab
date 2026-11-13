@@ -29,17 +29,37 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPlaceholderPlaceholderPlaceholder0000000000A alice@example"
     ];
     tailnetIp = "100.64.0.1";
-    backups.resticRepo = "rclone:remote:homelab-backup";
+    backups = {
+      resticRepo = "rclone:remote:homelab-backup";
+      # Forgejo's data dir is /var/lib/gitea in the container, and the
+      # rootless image keeps the SQLite database at data/gitea.db (not forgejo.db).
+      jobs.forgejo = {
+        paths = [ "/var/lib/forgejo" ];
+        sqliteDatabases = [ "/var/lib/forgejo/data/gitea.db" ];
+      };
+    };
 
     reverseProxy = {
       caddyfile = ./assets/caddy/Caddyfile;
       notFoundPage = ./assets/caddy/404.html;
+      tailscaleIdentity.enable = true;
     };
     observability = {
       prometheusConfig = ./assets/prometheus.yml;
       lokiConfig = ./assets/loki-config.yaml;
       alertingConfig = ./assets/grafana-alerting.yaml;
       dashboardsDir = ./assets/dashboards;
+      # Sites behind Caddy, probed for availability and certificate expiry.
+      # Each must answer 2xx (Grafana's /api/health does; Loki's / is a 404).
+      probeTargets = [
+        "https://start.home.example.com"
+        "https://vault.home.example.com"
+        "https://status.home.example.com/api/health"
+      ];
+      grafanaProxyAuth = {
+        enable = true;
+        admins = [ "alice@example" ];
+      };
     };
     homepage = {
       settingsFile = ./assets/homepage/settings.yaml;
@@ -58,6 +78,10 @@
       admin = {
         name = "alice";
         email = "alice@example.com";
+      };
+      proxyAuth = {
+        enable = true;
+        users."alice@example" = "alice";
       };
     };
   };

@@ -2,6 +2,11 @@
 
 let
   cfg = config.homelab;
+
+  # A tailnet login name as Tailscale reports it: alice@github,
+  # alice@example.com. Restricted to characters that need no quoting in the
+  # Caddyfile snippets built from them.
+  tailnetLogin = lib.types.strMatching "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+";
 in
 {
   options.homelab = {
@@ -118,7 +123,73 @@ in
     backups.resticRepo = lib.mkOption {
       type = lib.types.str;
       example = "rclone:gdrive:my-backup";
-      description = "restic repository string for the vaultwarden backup job.";
+      description = ''
+        restic repository string shared by every backup job: the built in
+        vaultwarden job and each entry of homelab.backups.jobs. Jobs tell
+        their snapshots apart by tag (the job name) and by path.
+      '';
+    };
+
+    backups.jobs = lib.mkOption {
+      default = { };
+      example = lib.literalExpression ''
+        {
+          forgejo = {
+            paths = [ "/var/lib/forgejo" ];
+            sqliteDatabases = [ "/var/lib/forgejo/data/gitea.db" ];
+          };
+        }
+      '';
+      description = ''
+        restic backup jobs, each a restic-backups-<name> unit and timer
+        against homelab.backups.resticRepo, with the password and rclone
+        credentials in /var/lib/secrets/restic-password and
+        /var/lib/secrets/rclone.env. The name vaultwarden is taken by the
+        built in job. Restoring is described in docs/backups.md.
+      '';
+      type = lib.types.attrsOf (lib.types.submodule {
+        options = {
+          paths = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            example = [ "/var/lib/forgejo" ];
+            description = "Files and directories to back up.";
+          };
+
+          sqliteDatabases = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            example = [ "/var/lib/forgejo/data/gitea.db" ];
+            description = ''
+              Live SQLite databases, as absolute paths. Before each run every
+              one is copied with sqlite3's .backup to the same path under
+              /var/backup/<name>/ (for example
+              /var/backup/forgejo/var/lib/forgejo/data/gitea.db), and the
+              copy is backed up instead of the live file. The live file and
+              its -wal, -shm and -journal sidecars are excluded. The copies
+              are removed after the run, also when it fails. A database that
+              does not exist fails the run.
+            '';
+          };
+
+          exclude = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            example = [ "/var/lib/forgejo/data/tmp" ];
+            description = "restic exclude patterns, in addition to the live databases.";
+          };
+
+          schedule = lib.mkOption {
+            type = lib.types.str;
+            default = "daily";
+            example = "*-*-* 03:00:00";
+            description = ''
+              When the job runs, as a systemd OnCalendar value. Missed runs
+              are caught up after boot (Persistent). Jobs may overlap; they
+              wait for each other's repository lock.
+            '';
+          };
+        };
+      });
     };
 
     yubikey.u2fKeysFile = lib.mkOption {
@@ -176,6 +247,35 @@ in
         type = lib.types.path;
         description = "Static 404 page served by Caddy.";
       };
+      tailscaleIdentity.enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Let Caddy look up the tailnet user behind each request, so sites
+          that `import tailnet_identity` (see the example Caddyfile) pass the
+          login name (`alice@github`) to their upstream as `Remote-User`.
+          Runs tailscale's nginx-auth WhoIs helper on a unix socket that the
+          caddy container mounts, and turns off tailscale's source NAT of
+          forwarded traffic (`tailscale set --snat-subnet-routes=false`) so
+          Caddy sees the tailnet client address. Do not enable on a host
+          that is a subnet router or exit node unless its LAN routes the
+          tailnet range back to it (docs/adr/0003-tailscale-identity-for-sign-in.md).
+        '';
+      };
+      address = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = "10.88.255.2";
+        example = null;
+        description = ''
+          Fixed address of the caddy container on podman's default network
+          (10.88.0.0/16), given to podman as --ip. Services that take
+          Remote-User from Caddy, like Grafana with
+          homelab.observability.grafanaProxyAuth, trust only this address.
+          The default sits high in the range, clear of the addresses podman
+          hands out in order. Null lets podman pick one, which the proxy
+          authentication options refuse.
+        '';
+      };
     };
 
     observability = {
@@ -194,6 +294,48 @@ in
       dashboardsDir = lib.mkOption {
         type = lib.types.path;
         description = "Directory of Grafana dashboard JSON files, provisioned read-only.";
+      };
+      probeTargets = lib.mkOption {
+        type = lib.types.listOf (lib.types.strMatching "https://.+");
+        default = [ ];
+        example = [ "https://vault.example.com" "https://status.example.com/api/health" ];
+        description = ''
+          HTTPS URLs the blackbox exporter probes with its http_2xx_tls
+          module, the way clients reach them. A probe fails on a non-2xx
+          answer or an invalid certificate, and reports the certificate's
+          expiry. The host running the observability module must resolve
+          each name to the address clients use (Caddy's tailnet address).
+          Prometheus reads the list from
+          /etc/prometheus/probe-targets.json (file_sd); the blackbox job in
+          prometheus.yml points at it.
+        '';
+      };
+      grafanaProxyAuth = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Sign in to Grafana with the tailnet identity Caddy passes as
+            Remote-User, from homelab.reverseProxy.address only, and turn off
+            anonymous access, password logins and basic auth. Grafana creates
+            the user on first sign in. The status site imports
+            `grafana_identity`, which the reverse proxy generates from
+            homelab.observability.grafanaProxyAuth.admins
+            (docs/adr/0005-proxy-auth-only-from-caddy.md). Off, Grafana keeps
+            anonymous access with the Admin role, so anyone who reaches it is
+            an admin.
+          '';
+        };
+        admins = lib.mkOption {
+          type = lib.types.listOf tailnetLogin;
+          default = [ ];
+          example = [ "alice@github" ];
+          description = ''
+            Tailnet logins that sign in to Grafana, all with the Admin role
+            in the main organisation. Caddy passes no identity for anyone
+            else, so they get no access.
+          '';
+        };
       };
     };
 
@@ -225,6 +367,22 @@ in
       servicesFile = lib.mkOption {
         type = lib.types.path;
         description = "homepage services.yaml; __DOMAIN__ is templated.";
+      };
+    };
+
+    nextcloud = {
+      bindAddress = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = cfg.tailnetIp;
+        defaultText = lib.literalExpression "config.homelab.tailnetIp";
+        example = "192.0.2.10";
+        description = ''
+          Host address the Nextcloud AIO admin UI (port 8080) and its Apache
+          container (APACHE_PORT, 11000) listen on. Defaults to the tailnet
+          address, which keeps Nextcloud tailnet-only; set a LAN address, or
+          "0.0.0.0", to opt in to LAN access. The module refuses to evaluate
+          while it is null rather than listen on every interface.
+        '';
       };
     };
 
@@ -281,6 +439,34 @@ in
           default = null;
           example = "alice@example.com";
           description = "Email address of Forgejo's first admin; see homelab.forgejo.admin.name.";
+        };
+      };
+      proxyAuth = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Sign in to Forgejo's web UI with the tailnet identity Caddy
+            passes as Remote-User. Forgejo does not check where that header
+            comes from, so its HTTP moves from port 3000 on the podman
+            network to the unix socket /run/forgejo-http/http.sock, which
+            only the caddy container mounts; the git site's reverse_proxy
+            must point there. Only existing users sign in this way, with the
+            name homelab.forgejo.proxyAuth.users maps the login to; the git
+            site imports `forgejo_identity`, which the reverse proxy
+            generates from it (docs/adr/0005-proxy-auth-only-from-caddy.md).
+            Tokens over HTTPS and git over SSH work as before.
+          '';
+        };
+        users = lib.mkOption {
+          type = lib.types.attrsOf (lib.types.strMatching "[A-Za-z0-9._-]+");
+          default = { };
+          example = { "alice@github" = "alice"; };
+          description = ''
+            Tailnet login to Forgejo user name, for the users that may sign
+            in with their tailnet identity. Keys are tailnet logins
+            (alice@github). Caddy passes no identity for logins not listed.
+          '';
         };
       };
     };

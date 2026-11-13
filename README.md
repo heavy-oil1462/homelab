@@ -37,10 +37,11 @@ modules = [
 ]
 ```
 
-See `examples/` for a full server host, a workstation host, and a consumer
-flake. `examples/assets/` holds commented starting points for every config
-file a module consumes (Caddyfile, Frigate, Prometheus, homepage, Home
-Assistant, Hyprland). All example IPs are from RFC 5737 documentation ranges.
+See `examples/` for a full server host, a workstation host, a VM host on a
+disko layout, and a consumer flake. `examples/assets/` holds commented
+starting points for every config file a module consumes (Caddyfile, Frigate,
+Prometheus, homepage, Home Assistant, Hyprland). All example IPs are from
+RFC 5737 documentation ranges.
 
 ## Modules
 
@@ -55,10 +56,44 @@ Services (OCI containers, pinned by digest):
 
 - `reverse-proxy`: Caddy. With `homelab.tailnetIp` set, 443 binds to the
   tailnet address only, which makes every site tailnet-only.
+  With `homelab.reverseProxy.tailscaleIdentity.enable`, sites that
+  `import tailnet_identity` (example Caddyfile) pass the tailnet user's login
+  name to their upstream as `Remote-User`, looked up through tailscale's
+  nginx-auth. Client-sent identity headers are always deleted, and requests
+  with an `Authorization` header pass without an identity. It turns off
+  tailscale's subnet-route SNAT, so don't enable it on a subnet router or
+  exit node (docs/adr/0003-tailscale-identity-for-sign-in.md).
+  The caddy container has the fixed address `homelab.reverseProxy.address`
+  (10.88.255.2) on podman's default network. With Forgejo's or Grafana's
+  proxy authentication on, it also defines `forgejo_identity` and
+  `grafana_identity`, which include `tailnet_identity` and map the login to
+  the service's user (docs/adr/0005-proxy-auth-only-from-caddy.md).
 - `observability`: Prometheus, Loki, Grafana with provisioned datasources,
-  dashboards and alerting.
-- `vaultwarden`, `homepage`, `homeassistant`, `nvr` (Frigate), `nextcloud`
-  (AIO).
+  dashboards and alerting. A blackbox exporter on the host probes the HTTPS
+  URLs in `homelab.observability.probeTargets` through Caddy, as clients
+  reach them; it listens on the podman bridge only. The host must resolve the
+  site names to Caddy's tailnet address (with Tailscale DNS, a split-DNS
+  record for the domain). `examples/assets/grafana-alerting.yaml` alerts on
+  failed units, failed or stale backups, full disks, hosts that are down,
+  certificates that expire within 14 days and sites that are down or serve
+  an invalid certificate, through one placeholder contact point. Grafana
+  gives anyone who reaches it anonymous Admin access, unless
+  `homelab.observability.grafanaProxyAuth.enable` is set: then only the
+  tailnet logins in `homelab.observability.grafanaProxyAuth.admins` sign in,
+  as Admin, through a status site that imports `grafana_identity`, and
+  Grafana trusts `Remote-User` only from Caddy's address.
+- `vaultwarden`, `homepage`, `homeassistant`.
+- `nextcloud`: Nextcloud All-in-One mastercontainer, pinned by digest. Its
+  admin UI (8080) and the Apache container it starts (11000) bind to
+  `homelab.nextcloud.bindAddress`, the tailnet address by default. To reach
+  them from the LAN, set it to a LAN address (or `"0.0.0.0"`) and open the
+  ports in the host's firewall. AIO updates the containers it manages from
+  its UI when you ask it to; the AIO version itself changes with the pin.
+- `nvr`: Frigate with GPU detection, recordings on `/surveillance`, state in
+  `/var/lib/frigate`. Camera credentials (FRIGATE_* variables the config
+  expands) come from `/var/lib/secrets/frigate.env`. Hosts that still have
+  the old `/etc/secrets/frigate.env` get it copied over on the next start;
+  remove the old file once Frigate works.
 - `unifi`: UniFi Network controller (linuxserver image) with its own
   MongoDB container (auth enabled). Expects MONGO_INITDB_ROOT_USERNAME,
   MONGO_INITDB_ROOT_PASSWORD, MONGO_USER and MONGO_PASS in
@@ -83,7 +118,17 @@ Services (OCI containers, pinned by digest):
   https://git.<domain>/user/login:
   `journalctl -u forgejo-admin`. Forgejo asks for a new password at the
   first sign in; add a passkey after that. Unset, the admin is created by
-  hand as the module's header comment shows.
+  hand as the module's header comment shows. The module does not back
+  itself up; add a backup job on the host, as `examples/server.nix` does:
+  `homelab.backups.jobs.forgejo` with path `/var/lib/forgejo` and database
+  `/var/lib/forgejo/data/gitea.db`.
+  With `homelab.forgejo.proxyAuth.enable`, the tailnet logins in
+  `homelab.forgejo.proxyAuth.users` sign in to the web UI as the Forgejo
+  user they map to, through a git site that imports `forgejo_identity`.
+  Users are not created on sign in. Forgejo then serves HTTP only on the
+  socket `/run/forgejo-http/http.sock`, which the caddy container mounts,
+  so the git site proxies to `unix//run/forgejo-http/http.sock` instead of
+  `forgejo:3000`. Tokens and git over SSH work as before.
 - `agent-sandbox`: a rootless podman sandbox for AI coding agents (Claude
   Code, Antigravity) with per-project state, shared gh/Claude auth, pinned
   commit identity, and an optional personal skills repo synced into every
@@ -93,14 +138,39 @@ System:
 
 - `common` (auto-upgrade, GC, flakes, user, firewall), `openssh` (keys from
   `homelab.adminKeys`), `acme` (Cloudflare DNS-01), `backups` (restic to any
-  rclone remote), `locale`, `yubikey` (pam_u2f with a host-independent
-  origin), `firewall` (role-based baseline), `nvidia`, `vm-disko`,
+  rclone remote: Vaultwarden, plus the jobs in `homelab.backups.jobs`, with
+  consistent SQLite snapshots; restoring is in
+  [docs/backups.md](docs/backups.md)), `locale`, `yubikey` (pam_u2f with a
+  host-independent origin), `firewall` (role-based baseline), `nvidia` (proprietary driver;
+  the host must allow the unfree `nvidia-x11` and `nvidia-settings`, as
+  `examples/workstation.nix` does), `vm-disko` (single-disk VM layout; needs
+  disko's NixOS module from your own flake, as `examples/vm.nix` shows),
   `tailscale`, `logging-agent`, `observability-agent`, and the desktop
   modules.
 
+## Secrets
+
 Secrets are never part of the configuration: modules reference runtime paths
-under `/var/lib/secrets/` (Cloudflare token, restic password, HA token,
-camera credentials) that you provision on the host out of band.
+under `/var/lib/secrets/` that you provision on the host out of band. For the
+files containers read, a tmpfiles rule creates an empty file with the right
+owner and mode if none exists, so a missing secret never stops podman from
+starting a container or makes it create a directory in the file's place.
+
+| File | Read by | Owner, mode | When empty or missing |
+| --- | --- | --- | --- |
+| `frigate.env` | `nvr` | root, 0400 | Frigate cannot expand the camera credentials in its config; no camera connects |
+| `unifi.env` | `unifi` | root, 0400 | `unifi-db` refuses to start (MongoDB would run without auth), so `unifi` does not start |
+| `homeassistant-secrets.yaml` | `homeassistant` | root, 0400 | Home Assistant starts; config that uses `!secret` does not load |
+| `ha-prometheus-token` | `observability` | prometheus, 0640 | Prometheus runs; the home-assistant scrape fails with 401 |
+| `registry.htpasswd` | `registry` | registry, 0400 | the registry refuses to start, naming the file |
+| `forgejo-secret-key` | `forgejo` | forgejo, 0400 | Forgejo refuses to start |
+| `cloudflare.env` | `acme` | root | certificate renewal fails |
+| `restic-password`, `rclone.env` | `backups` | root | backups fail |
+| `tailscale-authkey` | `tailscale` | root | not needed once the host is on the tailnet; deleted after use |
+
+The last three are read by NixOS services, not containers, and get no
+tmpfiles rule: missing, their units fail the same way they would with an
+empty file, and the Tailscale key must stay absent once used.
 
 ## Static user ids
 

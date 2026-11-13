@@ -1,7 +1,7 @@
 # Example Frigate config for the nvr module. __DOMAIN__ is replaced with
 # homelab.domain at build time. Camera credentials stay out of the config:
 # {FRIGATE_RTSP_PASSWORD} is expanded by Frigate from the runtime env file
-# (/etc/secrets/frigate.env). The camera IP is an RFC 5737 placeholder.
+# (/var/lib/secrets/frigate.env). The camera IP is an RFC 5737 placeholder.
 mqtt:
   enabled: false
 
