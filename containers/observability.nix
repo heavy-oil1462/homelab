@@ -205,6 +205,9 @@ in
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
+      # A oneshot has no start timeout of its own. The script gives up
+      # after about 23 minutes; this stops it should anything else hang.
+      TimeoutStartSec = "30min";
       StateDirectory = "grafana-git-sync";
       StateDirectoryMode = "0700";
       ExecStart = utils.escapeSystemdExecArgs [
