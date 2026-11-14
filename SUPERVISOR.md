@@ -5,10 +5,10 @@ supervisor.
 
 ## Team
 
-At most two workers (the project limit). Use one while CI is missing, since
-reviews then depend on evaluating changes by hand; use two once CI runs and
-two independent issues are ready. Remove a worker once it has had no issue
-for a while.
+At most four workers, the limit set on podium's status page. Use one while
+CI checks do not report, since reviews then depend on evaluating changes by
+hand; add more only for independent issues that are ready. Remove a worker
+once it has had no issue for a while.
 
 ## Cutting issues
 
@@ -26,8 +26,9 @@ for a while.
 
 ## Review
 
-- `nix flake check` must pass; until CI exists, run it yourself on the
-  head commit before merging.
+- `nix flake check` must pass; until CI checks report in cue, run it
+  yourself on the head commit before approving. homelab-config needs the
+  private podium input overridden with a stub to evaluate here.
 - Image changes: digest and version comment change together; the digest is
   the one the comment names.
 - New or changed options are typed, described, live in
@@ -36,8 +37,36 @@ for a while.
 - Nothing listens on LAN interfaces unless an option opts in; no secret
   values or site-specific values in the tree.
 
+## Stuck issues
+
+Owner direction (board, 2026-11-12): clean up stuck issues. Each event
+batch, look at issues that have not moved for a day: in review with checks
+pending, blocked, open with needs:owner, or ready with nobody taking them.
+Review what can be reviewed, release idle workers, and name what is
+outside the team (runner, deploy, an owner click) on the issue and in the
+next report, rather than letting it sit.
+
+## What waits on the owner
+
+Owner direction (board, 2026-11-13): "It is quite unclear now for me if
+something is waiting for my approval. Can that be made more clear".
+
+- Anything that needs the owner's decision or action is a cue question,
+  never only a comment or a needs:owner tag, since cue shows questions to
+  the owner.
+- Every status report starts with a "Waiting for you" list: each item with
+  what to do and where (cue question, podium setting, deploy), or
+  "nothing".
+- The supervisor never leaves its own change sets for the owner to
+  approve. Docs changes go through a worker issue like any other.
+
 ## Lessons
 
 - 2026-10-26: the bot account started with read-only access; a session
   start should check `gh api repos/heavy-oil1462/homelab --jq .permissions`
   before planning work.
+- 2026-11-12: Forgejo Actions run 122 waited a day with no runner picking
+  up `runs-on: docker`. Check run state with the Forgejo API
+  (/api/v1/repos/homelab/homelab/actions/runs) before blaming a workflow.
+- 2026-11-13: change sets the supervisor makes itself do not merge; carry
+  docs changes in worker issues.

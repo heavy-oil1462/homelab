@@ -1,4 +1,5 @@
 # ADR-0001: disko is a flake input for the checks only
+
 Status: Accepted
 
 ## Context
