@@ -97,15 +97,18 @@ Services (OCI containers, pinned by digest):
   `/var/lib/secrets/grafana-oidc-client-id` and
   `/var/lib/secrets/grafana-oidc-client-secret`
   (docs/adr/0006-tsidp-for-oidc-sign-in.md,
-  docs/adr/0010-tsidp-clients-declared-in-nix.md). Dashboards come from
-  `homelab.observability.dashboardsDir`, which needs a rebuild to change,
-  or with `homelab.observability.dashboardsGit` from a directory of a Git
-  repository: the `grafana-dashboards-sync` timer fetches it every two
-  minutes with a read-only deploy key, checks each file and copies it into
-  place, so a merged change reaches Grafana with no deploy; a bad commit
-  keeps the last good set and fails the unit. See
-  [docs/dashboards.md](docs/dashboards.md)
-  (docs/adr/0008-dashboards-synced-from-git.md).
+  docs/adr/0010-tsidp-clients-declared-in-nix.md). Dashboards in
+  `homelab.observability.dashboardsDir` are provisioned read-only into the
+  Homelab folder and change with a rebuild. With
+  `homelab.observability.grafanaGitSync`, Grafana's Git Sync keeps a
+  folder of dashboards in step with a directory of a Forgejo repository,
+  both ways: a change pushed to the branch shows in Grafana within a
+  minute, and a dashboard saved in Grafana is committed to the branch. The
+  `grafana-git-sync` unit sets the repository up in Grafana through its
+  API, with a Forgejo token and a Grafana service account token. The
+  repository must let Grafana push to the branch, so it is not a protected
+  one. See [docs/dashboards.md](docs/dashboards.md)
+  (docs/adr/0009-dashboards-through-grafana-git-sync.md).
 - `vaultwarden`, `homepage`, `homeassistant`.
 - `nextcloud`: Nextcloud All-in-One mastercontainer, pinned by digest. Its
   admin UI (8080) and the Apache container it starts (11000) bind to
@@ -232,14 +235,14 @@ starting a container or makes it create a directory in the file's place.
 | `forgejo-secret-key` | `forgejo` | forgejo, 0400 | Forgejo refuses to start |
 | `grafana-oidc-client-id`, `grafana-oidc-client-secret` | `observability`, with `grafanaOidc` | grafana, 0400 | written by tsidp for a client in `homelab.tsidp.clients`; otherwise Grafana runs and no one can sign in |
 | `forgejo-oidc-client-id`, `forgejo-oidc-client-secret` | `forgejo`, with `oidc` | root, 0400 | written by tsidp for a client in `homelab.tsidp.clients`; otherwise the `forgejo-oidc` unit fails and Forgejo runs without the sign in source |
-| `grafana-dashboards-deploy-key` | `observability`, with `dashboardsGit` | root, 0400 | the `grafana-dashboards-sync` unit fails; Grafana keeps the dashboards it has |
+| `grafana-git-sync-token`, `grafana-git-sync-api-token` | `observability`, with `grafanaGitSync` | root, 0400 | the `grafana-git-sync` unit fails; Grafana keeps the repository it has, or has none on a new host |
 | `tsidp.env` | `tsidp` | root, 0400 | missing, tsidp does not start, even once it has joined the tailnet; empty, a new tsidp prints a sign in link to its journal instead of joining |
 | `cloudflare.env` | `acme` | root | certificate renewal fails |
 | `restic-password`, `rclone.env` | `backups` | root | backups fail |
 | `tailscale-authkey` | `tailscale` | root | not needed once the host is on the tailnet; deleted after use |
 
 `cloudflare.env`, the backup secrets, `tailscale-authkey`, `tsidp.env`,
-the dashboards' deploy key and Forgejo's OIDC files are read by NixOS services, not containers, and get no
+the Git Sync tokens and Forgejo's OIDC files are read by NixOS services, not containers, and get no
 tmpfiles rule: missing, their units fail, as most would with an empty file,
 and the Tailscale key must stay absent once used. Once tsidp has joined,
 its key may be revoked; the file stays, emptied if you like.

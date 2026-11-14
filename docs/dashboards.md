@@ -1,77 +1,107 @@
-# Dashboards from Git
+# Dashboards in Git
 
-With `homelab.observability.dashboardsGit`, Grafana's dashboards live in a
-Git repository and a merged change reaches Grafana within a few minutes,
-with no rebuild (docs/adr/0008-dashboards-synced-from-git.md). The
-`grafana-dashboards-sync` timer fetches the branch every `interval`, checks
-that each `*.json` is JSON with a `title`, and copies the directory into
-`/var/lib/grafana-dashboards/live`, which Grafana reads every 30 seconds.
+Grafana's dashboards come from two places
+(docs/adr/0009-dashboards-through-grafana-git-sync.md):
+
+- `homelab.observability.dashboardsDir`: files in the host's config,
+  read-only in Grafana's Homelab folder, changed with a rebuild. For the
+  dashboards that come with the library, like
+  `examples/assets/dashboards/gpu.json`.
+- `homelab.observability.grafanaGitSync`: Grafana's Git Sync keeps the
+  folder "Dashboards" in step with a directory of a Forgejo repository,
+  both ways. Edit a dashboard in Grafana and it is committed to the
+  branch; push a change to the branch and Grafana shows it within a
+  minute. No rebuild either way.
+
+Keep each dashboard in one place. To move one from `dashboardsDir` into
+Git, add it to the repository and remove it from `dashboardsDir` in the
+same change.
 
 ```nix
-homelab.observability.dashboardsGit = {
+homelab.observability.grafanaGitSync = {
   enable = true;
-  url = "ssh://git@git.example.com:2222/org/dashboards.git";
-  # branch = "main"; path = "dashboards"; interval = "2min";
-  # keyFile = "/var/lib/secrets/grafana-dashboards-deploy-key";
+  url = "https://git.example.com/org/dashboards.git";
+  # branch = "main"; path = "dashboards"; intervalSeconds = 60;
+  # tokenFile = "/var/lib/secrets/grafana-git-sync-token";
+  # apiTokenFile = "/var/lib/secrets/grafana-git-sync-api-token";
 };
 ```
 
-Remove `dashboardsDir` from the host: a host uses one or the other. The
-example dashboards in `examples/assets/dashboards` are a starting point for
-the repository's `dashboards` directory.
+The URL is HTTPS: Git Sync speaks Git over HTTPS with protocol v2 only,
+which Forgejo serves, and no SSH.
 
-## A read-only deploy key
+## The repository
 
-The host signs in to Forgejo with an SSH key that can read this one
-repository and nothing else.
+Grafana pushes what you save straight to the branch; Pure Git cannot open
+pull requests. So the repository must let Grafana's token push to the
+branch without review:
 
-1. On the Grafana host, as root, make the key:
+- Make a repository for dashboards only, not one of the team's protected
+  repositories.
+- Leave its branch unprotected, or allow the token's user to push to it.
+- The `dashboards` directory may start empty. Grafana adds one file per
+  dashboard, and a `_folder.json` in each subfolder it makes.
+
+## The tokens
+
+Two files under `/var/lib/secrets`, each owned by root, mode 0400, read
+only by the `grafana-git-sync` unit, which hands the first to Grafana.
+
+1. **Forgejo.** Best from a Forgejo user of its own that has write access
+   to this one repository: the token can push wherever its user can. Sign
+   in as that user, open Settings, Applications, and generate a token with
+   the scope `write:repository`. Then on the Grafana host:
 
    ```sh
-   ssh-keygen -t ed25519 -N "" -C "grafana-dashboards@$(hostname)" \
-     -f /var/lib/secrets/grafana-dashboards-deploy-key
-   chmod 0400 /var/lib/secrets/grafana-dashboards-deploy-key
-   cat /var/lib/secrets/grafana-dashboards-deploy-key.pub
+   install -m 0400 /dev/null /var/lib/secrets/grafana-git-sync-token
+   cat > /var/lib/secrets/grafana-git-sync-token   # paste, then Ctrl-D
    ```
 
-2. In Forgejo, open the repository's Settings, then Deploy keys, and add
-   the public key. Leave "Enable write access" unticked.
-3. Rebuild the host with the option on, then check the first run:
+2. **Grafana.** In Grafana, open Administration, Users and access,
+   Service accounts, and add one named `git-sync` with the role Admin. Add
+   a token to it and put it in
+   `/var/lib/secrets/grafana-git-sync-api-token` the same way.
 
-   ```sh
-   systemctl start grafana-dashboards-sync
-   journalctl -u grafana-dashboards-sync -n 20
-   ```
+Rebuild the host with the option on, then check the unit:
 
-   It logs `dashboards synced from main at <commit>`. The first fetch
-   trusts Forgejo's SSH host key and stores it in
-   `/var/lib/grafana-dashboards/state/known_hosts`. If Forgejo's host key
-   changes, delete that file and run the unit again.
+```sh
+systemctl status grafana-git-sync
+journalctl -u grafana-git-sync -n 20
+```
 
-Protect the branch in Forgejo (Settings, Branches) so changes reach it
-through pull requests: whoever can push to it changes what Grafana shows.
+It logs `Created the Git Sync repository homelab-dashboards.` and
+`Grafana reaches the repository homelab-dashboards.` The first pull
+follows; Administration, Provisioning shows the repository, its last pull
+and any file it could not read.
+
+To change a token, replace the file and run
+`systemctl restart grafana-git-sync`. The unit also runs at every boot and
+after every rebuild that changes the settings, and leaves Grafana alone
+when nothing changed. A token that Forgejo refuses fails the unit, which
+the "Failed systemd unit" alert reports.
 
 ## Editing a dashboard
 
-Dashboards are read-only in Grafana; the repository is the source of
-truth.
+- **In Grafana:** open a dashboard in the Dashboards folder, change it and
+  Save. Grafana asks for a commit message and pushes the commit to the
+  branch, authored by you. New dashboards saved into the folder, and
+  dashboards deleted from it, are committed the same way.
+- **In Git:** edit the dashboard's file in Forgejo's web editor or a
+  clone and push to the branch. Grafana pulls every `intervalSeconds`, or
+  at once with Pull on the repository's page under Administration,
+  Provisioning. Deleting the file deletes the dashboard.
 
-- **In Forgejo:** edit the JSON file in the web editor or a clone, and
-  merge. Grafana has it within the interval plus 30 seconds.
-- **In Grafana:** change the dashboard, then choose Save dashboard; Grafana
-  says it cannot save a provisioned dashboard and offers the JSON. Copy it,
-  or use Export, Export as JSON, with "Export for sharing externally" off
-  so the datasource uids (`Prometheus`, `Loki`) stay. Commit it over the
-  file in the repository, keeping its `uid`, and merge.
+Each file is a whole dashboard, as Grafana writes it, or as Export, Export
+as JSON gives it with "Export for sharing externally" off, so the
+datasource uids (`Prometheus`, `Loki`) stay. Keep its `uid`, so links
+survive edits. A file Grafana cannot read is skipped and named on the
+repository's page; the other dashboards still sync.
 
-Each file needs a `title`, and should keep a fixed `uid` so links to the
-dashboard survive edits. Deleting a file removes the dashboard.
+Pull before you push from a clone: Grafana commits to the same branch, and
+Forgejo refuses a push that is behind it.
 
-## When a commit is bad
+## Turning it off
 
-A commit with a file that is not JSON, or a dashboard without a title,
-does not reach Grafana: the last good dashboards stay, the unit fails and
-logs which file, and the "Failed systemd unit" alert fires. Fix the file
-in the repository; the next run that syncs clears the failed unit. The same
-holds when the fetch fails, for example while the key file is missing or
-Forgejo is down.
+Turning the option off stops the unit; the repository, its folder and
+dashboards stay in Grafana. Delete the repository under Administration,
+Provisioning, and say whether its dashboards go with it.

@@ -1,8 +1,7 @@
 # The example server with Forgejo and Grafana on proxy authentication
 # (docs/adr/0005-proxy-auth-only-from-caddy.md) instead of tsidp, so the
 # flake's checks evaluate that path too and run the identity snippets it
-# generates. A host uses one or the other for each service. Its dashboards
-# come from examples/assets/dashboards rather than a Git repository.
+# generates. A host uses one or the other for each service.
 { lib, ... }:
 
 let
@@ -33,9 +32,6 @@ in
   homelab = {
     reverseProxy.caddyfile = lib.mkForce (builtins.toFile "Caddyfile" caddyfile);
     observability = {
-      # Dashboards from a directory in the config, as without a repository.
-      dashboardsGit.enable = lib.mkForce false;
-      dashboardsDir = ./assets/dashboards;
       grafanaOidc.enable = lib.mkForce false;
       grafanaProxyAuth = {
         enable = true;

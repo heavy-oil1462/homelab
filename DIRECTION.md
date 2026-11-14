@@ -121,10 +121,12 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   podium can use in the future, for now just vaka should use it", owner,
   board, 2026-11-14): vaka now; cue, fyr and podium when the owner says
   so. A change to sign-in is made there first.
-- Dashboards are edited in Git and reach Grafana without a deploy
-  ("start provisioning my grafana dashboards directly from forgejo so they
-  can be updated easily without deploy", owner, board, 2026-11-14;
-  ADR-0008).
+- Dashboards are edited in Grafana or in Git and reach the other side
+  without a deploy, through Grafana's own two-way Git Sync with a Forgejo
+  repository ("start provisioning my grafana dashboards directly from
+  forgejo so they can be updated easily without deploy", owner, board,
+  2026-11-14; the owner chose Git Sync over the pull timer of ADR-0008,
+  question 01a1daf3-fb83, 2026-11-14; ADR-0009).
 - Services are configured from Nix; a manual step in a UI is a gap to
   close, not the design ("can forgejo and grafana OIDC be configured from
   the nix config instead of manually in the UI?", owner, board,
