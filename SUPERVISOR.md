@@ -5,10 +5,10 @@ supervisor.
 
 ## Team
 
-At most four workers, the limit set on podium's status page. Use one while
-CI checks do not report, since reviews then depend on evaluating changes by
-hand; add more only for independent issues that are ready. Remove a worker
-once it has had no issue for a while.
+At most the limit set on podium's status page (GET /team, max_workers).
+Use one while CI checks do not report, since reviews then depend on
+evaluating changes by hand; add more only for independent issues that are
+ready. Remove a worker once it has had no issue for a while.
 
 ## Cutting issues
 
@@ -70,3 +70,7 @@ something is waiting for my approval. Can that be made more clear".
   (/api/v1/repos/homelab/homelab/actions/runs) before blaming a workflow.
 - 2026-11-13: change sets the supervisor makes itself do not merge; carry
   docs changes in worker issues.
+- 2026-11-14: four change sets in podium and cue sat in review overnight
+  with no review event reaching the supervisor. Each session, list
+  in_review issues and review any whose change set is waiting, rather than
+  relying on events alone.
