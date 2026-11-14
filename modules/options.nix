@@ -349,8 +349,67 @@ in
         description = "Grafana alerting provisioning YAML (rules and contact points).";
       };
       dashboardsDir = lib.mkOption {
-        type = lib.types.path;
-        description = "Directory of Grafana dashboard JSON files, provisioned read-only.";
+        type = lib.types.nullOr lib.types.path;
+        default = null;
+        description = ''
+          Directory of Grafana dashboard JSON files, provisioned read-only.
+          A change needs a rebuild. Null with
+          homelab.observability.dashboardsGit, which takes its place; one of
+          the two is set.
+        '';
+      };
+      dashboardsGit = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Provision Grafana's dashboards from a directory of a Git
+            repository instead of homelab.observability.dashboardsDir. A
+            timer fetches the branch every interval, checks that each *.json
+            is JSON with a title and copies the directory into
+            /var/lib/grafana-dashboards/live, which Grafana reads every 30
+            seconds. A merged change reaches Grafana within minutes without
+            a rebuild; a bad commit keeps the last good dashboards and fails
+            the grafana-dashboards-sync unit. Dashboards are read-only in
+            Grafana (docs/adr/0008-dashboards-synced-from-git.md).
+          '';
+        };
+        url = lib.mkOption {
+          type = lib.types.strMatching "ssh://.+";
+          example = "ssh://git@git.example.com/org/dashboards.git";
+          description = ''
+            SSH URL of the repository, without credentials. The host signs
+            in with the deploy key in keyFile and trusts the server's host
+            key on first use.
+          '';
+        };
+        branch = lib.mkOption {
+          type = lib.types.str;
+          default = "main";
+          description = "Branch whose head is provisioned.";
+        };
+        path = lib.mkOption {
+          type = lib.types.str;
+          default = "dashboards";
+          description = ''
+            Directory in the repository holding the dashboard JSON files,
+            relative to its root; "." for the whole repository.
+          '';
+        };
+        keyFile = lib.mkOption {
+          type = lib.types.str;
+          default = "/var/lib/secrets/grafana-dashboards-deploy-key";
+          description = ''
+            Private SSH key of a read-only deploy key for the repository,
+            owned by root, mode 0400, provisioned out of band.
+          '';
+        };
+        interval = lib.mkOption {
+          type = lib.types.str;
+          default = "2min";
+          example = "10min";
+          description = "How often to fetch, as a systemd time span.";
+        };
       };
       probeTargets = lib.mkOption {
         type = lib.types.listOf (lib.types.strMatching "https://.+");

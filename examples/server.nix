@@ -61,7 +61,14 @@
       prometheusConfig = ./assets/prometheus.yml;
       lokiConfig = ./assets/loki-config.yaml;
       alertingConfig = ./assets/grafana-alerting.yaml;
-      dashboardsDir = ./assets/dashboards;
+      # Dashboards from a Forgejo repository, synced every 2 minutes with
+      # no rebuild; the host's read-only deploy key is
+      # /var/lib/secrets/grafana-dashboards-deploy-key. assets/dashboards
+      # is a starting point for the repository's dashboards directory.
+      dashboardsGit = {
+        enable = true;
+        url = "ssh://git@git.example.com/org/dashboards.git";
+      };
       # Sites behind Caddy, probed for availability and certificate expiry.
       # Each must answer 2xx (Grafana's /api/health does; Loki's / is a 404).
       probeTargets = [
