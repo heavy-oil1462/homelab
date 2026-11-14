@@ -352,63 +352,79 @@ in
         type = lib.types.nullOr lib.types.path;
         default = null;
         description = ''
-          Directory of Grafana dashboard JSON files, provisioned read-only.
-          A change needs a rebuild. Null with
-          homelab.observability.dashboardsGit, which takes its place; one of
-          the two is set.
+          Directory of Grafana dashboard JSON files, provisioned read-only
+          into the Homelab folder. A change needs a rebuild. Null provisions
+          no files, for a host whose dashboards all come through
+          homelab.observability.grafanaGitSync. A dashboard is in one or the
+          other, never both.
         '';
       };
-      dashboardsGit = {
+      grafanaGitSync = {
         enable = lib.mkOption {
           type = lib.types.bool;
           default = false;
           description = ''
-            Provision Grafana's dashboards from a directory of a Git
-            repository instead of homelab.observability.dashboardsDir. A
-            timer fetches the branch every interval, checks that each *.json
-            is JSON with a title and copies the directory into
-            /var/lib/grafana-dashboards/live, which Grafana reads every 30
-            seconds. A merged change reaches Grafana within minutes without
-            a rebuild; a bad commit keeps the last good dashboards and fails
-            the grafana-dashboards-sync unit. Dashboards are read-only in
-            Grafana (docs/adr/0008-dashboards-synced-from-git.md).
+            Sync dashboards both ways between Grafana and a directory of a
+            Git repository with Grafana's Git Sync, Pure Git type. Grafana
+            pulls the branch every intervalSeconds, and a dashboard saved in
+            Grafana's UI is committed and pushed to the branch. The
+            grafana-git-sync unit creates or updates the repository in
+            Grafana through its API. The repository must let the token push
+            to the branch, so it is not a protected one
+            (docs/adr/0009-dashboards-through-grafana-git-sync.md,
+            docs/dashboards.md).
           '';
         };
         url = lib.mkOption {
-          type = lib.types.strMatching "ssh://.+";
-          example = "ssh://git@git.example.com/org/dashboards.git";
+          type = lib.types.strMatching "https://[^/@]+/.+";
+          example = "https://git.example.com/org/dashboards.git";
           description = ''
-            SSH URL of the repository, without credentials. The host signs
-            in with the deploy key in keyFile and trusts the server's host
-            key on first use.
+            HTTPS URL of the repository, without credentials. Git Sync
+            speaks Smart HTTP protocol v2 only, which Forgejo serves; not
+            SSH. Grafana is allowed to reach this host even where it
+            resolves to a private address.
           '';
         };
         branch = lib.mkOption {
           type = lib.types.str;
           default = "main";
-          description = "Branch whose head is provisioned.";
+          description = "Branch that Grafana pulls from and pushes to.";
         };
         path = lib.mkOption {
           type = lib.types.str;
           default = "dashboards";
           description = ''
-            Directory in the repository holding the dashboard JSON files,
-            relative to its root; "." for the whole repository.
+            Directory in the repository holding the dashboards, relative to
+            its root. Grafana ignores everything outside it.
           '';
         };
-        keyFile = lib.mkOption {
-          type = lib.types.str;
-          default = "/var/lib/secrets/grafana-dashboards-deploy-key";
+        intervalSeconds = lib.mkOption {
+          type = lib.types.ints.between 10 86400;
+          default = 60;
           description = ''
-            Private SSH key of a read-only deploy key for the repository,
-            owned by root, mode 0400, provisioned out of band.
+            How often Grafana pulls the branch. Forgejo sends Pure Git no
+            webhooks, so this is how long a pushed change takes to show.
           '';
         };
-        interval = lib.mkOption {
+        tokenFile = lib.mkOption {
           type = lib.types.str;
-          default = "2min";
-          example = "10min";
-          description = "How often to fetch, as a systemd time span.";
+          default = "/var/lib/secrets/grafana-git-sync-token";
+          description = ''
+            Forgejo access token, with read and write access to the
+            repository's contents, that Grafana pulls and pushes with.
+            Owned by root, mode 0400, provisioned out of band; the
+            grafana-git-sync unit hands it to Grafana, which keeps it
+            encrypted.
+          '';
+        };
+        apiTokenFile = lib.mkOption {
+          type = lib.types.str;
+          default = "/var/lib/secrets/grafana-git-sync-api-token";
+          description = ''
+            Token of a Grafana service account with the Admin role, which
+            the grafana-git-sync unit calls Grafana's API with. Owned by
+            root, mode 0400, provisioned out of band.
+          '';
         };
       };
       probeTargets = lib.mkOption {

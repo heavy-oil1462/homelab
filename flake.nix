@@ -143,8 +143,8 @@
         forgejo-admin = pkgs.callPackage ./tests/forgejo-admin.nix { };
         # The forgejo-oidc unit's script against a stubbed podman and systemctl.
         forgejo-oidc = pkgs.callPackage ./tests/forgejo-oidc.nix { };
-        # The grafana-dashboards-sync unit's script against a local repository.
-        grafana-dashboards-sync = pkgs.callPackage ./tests/grafana-dashboards-sync.nix { };
+        # The grafana-git-sync unit's script against a stand-in for Grafana.
+        grafana-git-sync = pkgs.callPackage ./tests/grafana-git-sync.nix { };
         # The example Caddyfile's tailnet_identity snippet in a real Caddy.
         tailnet-identity = pkgs.callPackage ./tests/tailnet-identity.nix { };
         # The identity snippets the reverse proxy generates for the example

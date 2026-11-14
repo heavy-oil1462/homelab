@@ -1,6 +1,6 @@
 # ADR-0008: Grafana's dashboards are synced from a Git repository by a timer on the host
 
-Status: Accepted
+Status: Superseded by ADR-0009
 
 ## Context
 

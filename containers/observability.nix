@@ -84,17 +84,7 @@ let
   podmanBridge = "podman0";
   podmanGateway = "10.88.0.1";
 
-  # Dashboards from a Git repository (docs/adr/0008-dashboards-synced-from-git.md):
-  # the grafana-dashboards-sync unit copies them into liveDashboards, which
-  # the container mounts in place of dashboardsDir.
-  git = cfg.dashboardsGit;
-  syncScript = pkgs.callPackage ./grafana-dashboards-sync.nix { };
-  syncState = "/var/lib/grafana-dashboards";
-  liveDashboards = "${syncState}/live";
-  dashboardsSource = if git.enable then liveDashboards else cfg.dashboardsDir;
-
-  # The repository is the source of truth for synced dashboards, so Grafana
-  # does not let them be saved; edits are exported and committed.
+  # The dashboards in dashboardsDir, read-only in the Homelab folder.
   grafanaDashboards = pkgs.writeText "dashboards.yml" ''
     apiVersion: 1
     providers:
@@ -103,11 +93,48 @@ let
         folder: 'Homelab'
         type: file
         disableDeletion: false
-        updateIntervalSeconds: ${if git.enable then "30" else "10"}
+        updateIntervalSeconds: 10
         allowUiUpdates: false
         options:
           path: /etc/grafana/dashboards
   '';
+
+  # Dashboards synced both ways with a Git repository through Grafana's Git
+  # Sync (docs/adr/0009-dashboards-through-grafana-git-sync.md). The
+  # grafana-git-sync unit puts this Repository resource into Grafana, with
+  # the token from tokenFile added. Pure Git: plain Git over HTTPS, the only
+  # type that speaks to Forgejo. Grafana pushes saved dashboards straight
+  # to the branch ("write"); it cannot open pull requests on Forgejo.
+  gitSync = cfg.grafanaGitSync;
+  gitSyncScript = pkgs.callPackage ./grafana-git-sync.nix { };
+  # The URL's host name, without a port.
+  gitSyncHost = builtins.head (lib.splitString ":"
+    (builtins.head (lib.splitString "/" (lib.removePrefix "https://" gitSync.url))));
+  gitSyncRepository = pkgs.writeText "grafana-git-sync-repository.json" (builtins.toJSON {
+    apiVersion = "provisioning.grafana.app/v0alpha1";
+    kind = "Repository";
+    metadata = {
+      name = "homelab-dashboards";
+      namespace = "default";
+    };
+    spec = {
+      title = "Dashboards";
+      type = "git";
+      git = {
+        inherit (gitSync) url branch path;
+        # Forgejo takes an access token as the password whatever the user
+        # name.
+        tokenUser = "git";
+      };
+      # A folder of its own, named after the title, beside Homelab.
+      sync = {
+        enabled = true;
+        target = "folder";
+        inherit (gitSync) intervalSeconds;
+      };
+      workflows = [ "write" ];
+    };
+  });
 in
 {
   imports = [ ../modules/options.nix ];
@@ -116,10 +143,6 @@ in
     {
       assertion = !cfg.grafanaProxyAuth.enable || proxyAddress != null;
       message = "homelab.observability.grafanaProxyAuth trusts Remote-User from homelab.reverseProxy.address, which is null.";
-    }
-    {
-      assertion = git.enable != (cfg.dashboardsDir != null);
-      message = "Set one of homelab.observability.dashboardsDir and homelab.observability.dashboardsGit.enable: Grafana's dashboards come from one or the other.";
     }
     {
       assertion = !(cfg.grafanaProxyAuth.enable && oidc.enable);
@@ -155,13 +178,6 @@ in
   # written.
   systemd.tmpfiles.rules = [
     "f /var/lib/secrets/ha-prometheus-token 0640 prometheus prometheus -"
-  ] ++ lib.optionals git.enable [
-    # The synced dashboards, readable by the grafana container; the sync's
-    # state, with its fetched repository, by root only. The live directory
-    # exists before the first sync, so the container mounts a directory.
-    "d ${syncState} 0755 root root -"
-    "d ${syncState}/state 0700 root root -"
-    "d ${liveDashboards} 0755 root root -"
   ] ++ lib.optionals oidc.enable [
     # The same for the OIDC client's id and secret, which Grafana's
     # container reads: missing, sign in fails and Grafana runs.
@@ -169,39 +185,30 @@ in
     "f ${oidc.clientSecretFile} 0400 grafana grafana -"
   ];
 
-  # Fetch the dashboards every interval and copy them into place once they
-  # check out. A failed run leaves the unit failed, which the failed unit
-  # rule alerts on, until a run succeeds; Grafana keeps the last good set.
-  systemd.services.grafana-dashboards-sync = lib.mkIf git.enable {
-    description = "Sync Grafana's dashboards from Git";
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
+  # Create or update the Git Sync repository in Grafana, through its API on
+  # the container's address, whenever the config or a token changed and at
+  # every boot, then have Grafana test it against the Git server. Grafana
+  # keeps the repository in its database, so turning the option off leaves
+  # it there until deleted in Administration, Provisioning.
+  systemd.services.grafana-git-sync = lib.mkIf gitSync.enable {
+    description = "Set up Grafana's Git Sync repository";
+    after = [ "podman-grafana.service" "network-online.target" ];
+    wants = [ "podman-grafana.service" "network-online.target" ];
+    wantedBy = [ "multi-user.target" ];
+    path = [ config.virtualisation.podman.package ];
     serviceConfig = {
       Type = "oneshot";
+      RemainAfterExit = true;
+      StateDirectory = "grafana-git-sync";
+      StateDirectoryMode = "0700";
       ExecStart = utils.escapeSystemdExecArgs [
-        "${syncScript}/bin/grafana-dashboards-sync"
-        git.url
-        git.branch
-        git.path
-        git.keyFile
-        "${syncState}/state"
-        liveDashboards
+        "${gitSyncScript}/bin/grafana-git-sync"
+        "grafana"
+        gitSyncRepository
+        gitSync.tokenFile
+        gitSync.apiTokenFile
+        "/var/lib/grafana-git-sync/applied"
       ];
-      UMask = "0022";
-      ProtectSystem = "strict";
-      ReadWritePaths = [ syncState ];
-      ProtectHome = true;
-      PrivateTmp = true;
-      PrivateDevices = true;
-      NoNewPrivileges = true;
-    };
-  };
-
-  systemd.timers.grafana-dashboards-sync = lib.mkIf git.enable {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnBootSec = "1min";
-      OnUnitActiveSec = git.interval;
     };
   };
 
@@ -258,20 +265,28 @@ in
     };
 
     grafana = {
-      image = "docker.io/grafana/grafana@sha256:5dad0df181cb644a14e13617b913b261a54f7d4fd4510721dba420929f35bea2"; # :latest as of 2026-06-13
+      image = "docker.io/grafana/grafana@sha256:0615ec4fbd4072004b7d86b46ded63013a74b7d6eb1119273dd89e8fa25c13cf"; # 13.3.1, :latest as of 2026-11-14
       user = "${toString config.users.users.grafana.uid}:${toString config.users.groups.grafana.gid}";
       autoStart = true;
       volumes = [
         "grafana-data:/var/lib/grafana"
         "${grafanaDatasources}:/etc/grafana/provisioning/datasources/datasources.yml:ro"
-        "${grafanaDashboards}:/etc/grafana/provisioning/dashboards/dashboards.yml:ro"
         "${grafanaAlerting}:/etc/grafana/provisioning/alerting/alerting.yaml:ro"
-        "${dashboardsSource}:/etc/grafana/dashboards:ro"
+      ] ++ lib.optionals (cfg.dashboardsDir != null) [
+        "${grafanaDashboards}:/etc/grafana/provisioning/dashboards/dashboards.yml:ro"
+        "${cfg.dashboardsDir}:/etc/grafana/dashboards:ro"
       ] ++ lib.optionals oidc.enable [
         "${oidc.clientIdFile}:/run/secrets/oidc-client-id:ro"
         "${oidc.clientSecretFile}:/run/secrets/oidc-client-secret:ro"
       ];
-      environment = if oidc.enable then {
+      environment = lib.optionalAttrs gitSync.enable {
+        # Git Sync is on by default from Grafana 13; this allows Pure Git
+        # repositories only, and lets Grafana reach the repository's host,
+        # which it would refuse where the name resolves to a private
+        # address (a tailnet's IPv6 ULA, a LAN).
+        GF_PROVISIONING_REPOSITORY_TYPES = "git";
+        GF_PROVISIONING_ALLOWED_GIT_URLS = gitSyncHost;
+      } // (if oidc.enable then {
         # Sign in through the OpenID Connect provider, usually tsidp
         # (docs/adr/0006-tsidp-for-oidc-sign-in.md). The redirect URI is
         # built from the root URL. The image's entrypoint reads the
@@ -325,7 +340,7 @@ in
         GF_AUTH_ANONYMOUS_ENABLED = "true";
         GF_AUTH_ANONYMOUS_ORG_ROLE = "Admin";
         GF_AUTH_DISABLE_LOGIN_FORM = "true";
-      };
+      });
     };
   };
 }

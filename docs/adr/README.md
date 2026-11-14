@@ -42,4 +42,7 @@ Status is one of:
 - [ADR-0007](0007-backup-freshness-textfile-metric.md): Backup freshness is
   a node exporter textfile metric written by each job (Proposed)
 - [ADR-0008](0008-dashboards-synced-from-git.md): Grafana's dashboards are
-  synced from a Git repository by a timer on the host (Accepted)
+  synced from a Git repository by a timer on the host (Superseded by
+  ADR-0009)
+- [ADR-0009](0009-dashboards-through-grafana-git-sync.md): Dashboards
+  through Grafana Git Sync (Accepted)
