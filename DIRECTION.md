@@ -95,6 +95,12 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   private, in an organisation the domain already uses, and added to the
   cue domain. Deleting, renaming or making a repository public stays with
   the owner.
+- The team, supervisor and workers, may query the site's Prometheus and
+  Loki through podium's team egress, to inspect the homelab and debug
+  issues against real data ("I think it makes sense you get read access
+  to inspect my homelab", owner, board, 2026-11-14). Only read: the
+  query, labels and series endpoints. Never push to Loki, delete series
+  or use an admin API. Their hostnames stay out of the repository.
 - Verify with `nix flake check`. A new module or option must be used by an
   example host so the check evaluates it.
 - A new or changed module updates the README module list, and the example
