@@ -2,6 +2,10 @@
 
 Status: Accepted
 
+Amended by [ADR-0010](0010-tsidp-clients-declared-in-nix.md): clients a
+host declares in `homelab.tsidp.clients` are no longer registered by hand
+in the admin UI; tsidp writes their id and secret files before it starts.
+
 ## Context
 
 [ADR-0003](0003-tailscale-identity-for-sign-in.md) signs tailnet users in

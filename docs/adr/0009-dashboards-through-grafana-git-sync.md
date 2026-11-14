@@ -117,7 +117,10 @@ What was checked before deciding:
   fails the `grafana-git-sync` unit at its next run, which the failed unit
   alert reports.
 - Consumers provision two new secret files to turn the option on, and make
-  a service account in Grafana by hand. Hosts that used `dashboardsGit`
+  a service account in Grafana by hand. That is a step in a UI, which
+  DIRECTION.md counts as a gap to close (ADR-0010); closing it needs a way
+  for the host to make the account, such as a bootstrap admin password
+  file with basic auth on for local requests, left for later. Hosts that used `dashboardsGit`
   drop it and its deploy key, and either set `dashboardsDir` again or move
   those dashboards into the Git Sync repository.
 - Grafana keeps the repository and its token in its database, in the

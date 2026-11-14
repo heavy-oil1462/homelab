@@ -185,6 +185,12 @@ in
     "f ${oidc.clientSecretFile} 0400 grafana grafana -"
   ];
 
+  # With tsidp on this host and Grafana's client declared in
+  # homelab.tsidp.clients, tsidp writes the id and secret before it starts
+  # (docs/adr/0010-tsidp-clients-declared-in-nix.md); Grafana reads them
+  # only when it starts.
+  systemd.services.podman-grafana.after = lib.mkIf oidc.enable [ "tsidp.service" ];
+
   # Create or update the Git Sync repository in Grafana, through its API on
   # the container's address, whenever the config or a token changed and at
   # every boot, then have Grafana test it against the Git server. Grafana
