@@ -48,9 +48,31 @@
     };
 
     # Forgejo and Grafana sign in through tsidp, at
-    # https://idp.<tailnet>.ts.net. The auth key, and each client's id and
-    # secret, are files under /var/lib/secrets at their default paths.
-    tsidp.enable = true;
+    # https://idp.<tailnet>.ts.net, which joins the tailnet with the auth
+    # key in /var/lib/secrets/tsidp.env. Turning on a service's OIDC below
+    # declares its client here, and tsidp writes the client's id and a
+    # generated secret to the files the service reads.
+    tsidp = {
+      enable = true;
+      clients = lib.mkMerge [
+        (lib.mkIf config.homelab.forgejo.oidc.enable {
+          forgejo = {
+            redirectUris = [ "https://git.${config.homelab.domain}/user/oauth2/tailscale/callback" ];
+            idFile = config.homelab.forgejo.oidc.clientIdFile;
+            secretFile = config.homelab.forgejo.oidc.clientSecretFile;
+          };
+        })
+        (lib.mkIf config.homelab.observability.grafanaOidc.enable {
+          grafana = {
+            redirectUris = [ "https://status.${config.homelab.domain}/login/generic_oauth" ];
+            idFile = config.homelab.observability.grafanaOidc.clientIdFile;
+            secretFile = config.homelab.observability.grafanaOidc.clientSecretFile;
+            # The grafana container runs as the host's grafana user.
+            owner = "grafana";
+          };
+        })
+      ];
+    };
 
     reverseProxy = {
       caddyfile = ./assets/caddy/Caddyfile;

@@ -90,11 +90,14 @@ Services (OCI containers, pinned by digest):
   `homelab.observability.grafanaOidc.enable` instead, Grafana signs in
   through tsidp (the `tsidp` module): the logins in
   `homelab.observability.grafanaOidc.admins` get Admin, everyone else is
-  refused. Register a client in tsidp with the redirect URI
-  `https://status.<domain>/login/generic_oauth` and put its id and secret in
+  refused. Its client in tsidp has the redirect URI
+  `https://status.<domain>/login/generic_oauth`; declared in
+  `homelab.tsidp.clients` with owner `grafana`, as `examples/server.nix`
+  does, tsidp writes its id and secret to
   `/var/lib/secrets/grafana-oidc-client-id` and
   `/var/lib/secrets/grafana-oidc-client-secret`
-  (docs/adr/0006-tsidp-for-oidc-sign-in.md). Dashboards come from
+  (docs/adr/0006-tsidp-for-oidc-sign-in.md,
+  docs/adr/0010-tsidp-clients-declared-in-nix.md). Dashboards come from
   `homelab.observability.dashboardsDir`, which needs a rebuild to change,
   or with `homelab.observability.dashboardsGit` from a directory of a Git
   repository: the `grafana-dashboards-sync` timer fetches it every two
@@ -153,10 +156,11 @@ Services (OCI containers, pinned by digest):
   With `homelab.forgejo.oidc.enable` instead, the web UI signs in through
   tsidp (the `tsidp` module), and Forgejo creates an account on a user's
   first sign in. The `forgejo-oidc` unit adds tsidp as the sign in source
-  `tailscale` and restarts Forgejo when it changes. Register a client in
-  tsidp with the redirect URI
-  `https://git.<domain>/user/oauth2/tailscale/callback` and put its id and
-  secret in `/var/lib/secrets/forgejo-oidc-client-id` and
+  `tailscale` and restarts Forgejo when it changes. Its client in tsidp
+  has the redirect URI
+  `https://git.<domain>/user/oauth2/tailscale/callback`; declared in
+  `homelab.tsidp.clients`, tsidp writes its id and secret to
+  `/var/lib/secrets/forgejo-oidc-client-id` and
   `/var/lib/secrets/forgejo-oidc-client-secret`. A service uses proxy
   authentication or OIDC, never both
   (docs/adr/0006-tsidp-for-oidc-sign-in.md).
@@ -192,8 +196,15 @@ System:
   (`TS_AUTHKEY=tskey-auth-...`; a one-off tagged key). Its node and signing
   keys and the registered clients live in `homelab.tsidp.stateDir`
   (`/var/lib/private/tsidp`); back it up with a job, as
-  `examples/server.nix` does. Clients are registered in its admin UI at the
-  issuer URL, which needs a grant in the tailnet policy:
+  `examples/server.nix` does. Clients are declared in
+  `homelab.tsidp.clients.<id>` (`redirectUris`, `idFile`, `secretFile`,
+  `owner`): before tsidp starts, each gets its id and a generated secret in
+  its files under `/var/lib/secrets` when they are missing or empty, and is
+  written into tsidp's clients; clients added in the admin UI are left
+  alone (docs/adr/0010-tsidp-clients-declared-in-nix.md). The example
+  declares Forgejo's and Grafana's from their OIDC options. Other clients
+  can be registered in its admin UI at the issuer URL, which needs a grant
+  in the tailnet policy:
 
   ```hujson
   "grants": [{
@@ -219,8 +230,8 @@ starting a container or makes it create a directory in the file's place.
 | `ha-prometheus-token` | `observability` | prometheus, 0640 | Prometheus runs; the home-assistant scrape fails with 401 |
 | `registry.htpasswd` | `registry` | registry, 0400 | the registry refuses to start, naming the file |
 | `forgejo-secret-key` | `forgejo` | forgejo, 0400 | Forgejo refuses to start |
-| `grafana-oidc-client-id`, `grafana-oidc-client-secret` | `observability`, with `grafanaOidc` | grafana, 0400 | Grafana runs; no one can sign in |
-| `forgejo-oidc-client-id`, `forgejo-oidc-client-secret` | `forgejo`, with `oidc` | root, 0400 | the `forgejo-oidc` unit fails; Forgejo runs without the sign in source |
+| `grafana-oidc-client-id`, `grafana-oidc-client-secret` | `observability`, with `grafanaOidc` | grafana, 0400 | written by tsidp for a client in `homelab.tsidp.clients`; otherwise Grafana runs and no one can sign in |
+| `forgejo-oidc-client-id`, `forgejo-oidc-client-secret` | `forgejo`, with `oidc` | root, 0400 | written by tsidp for a client in `homelab.tsidp.clients`; otherwise the `forgejo-oidc` unit fails and Forgejo runs without the sign in source |
 | `grafana-dashboards-deploy-key` | `observability`, with `dashboardsGit` | root, 0400 | the `grafana-dashboards-sync` unit fails; Grafana keeps the dashboards it has |
 | `tsidp.env` | `tsidp` | root, 0400 | missing, tsidp does not start, even once it has joined the tailnet; empty, a new tsidp prints a sign in link to its journal instead of joining |
 | `cloudflare.env` | `acme` | root | certificate renewal fails |
@@ -265,7 +276,8 @@ paths, which catches option and type errors without building full systems.
 `examples/server-proxy-auth.nix` is the example server with Forgejo and
 Grafana on proxy authentication instead of tsidp, so both are evaluated. The
 checks also run the `forgejo-admin` and `forgejo-oidc` scripts against
-stubs and the Caddy identity snippets in a real Caddy.
+stubs, the `tsidp-clients` script against a fake tsidp state directory,
+and the Caddy identity snippets in a real Caddy.
 
 ## CI
 
