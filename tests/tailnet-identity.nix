@@ -11,7 +11,7 @@ in
 runCommand "tailnet-identity-test" { nativeBuildInputs = [ caddy curl python3 ]; } ''
   set -euo pipefail
   export HOME=$PWD XDG_DATA_HOME=$PWD XDG_CONFIG_HOME=$PWD
-  fail() { echo "FAIL: $*" >&2; cat caddy.log >&2 || true; exit 1; }
+  . ${./identity-harness.sh}
 
   # The snippet as the example ships it, dialing a socket in the build dir.
   sed -n '/^(tailnet_identity) {$/,/^}$/p' ${../examples/assets/caddy/Caddyfile} \
@@ -20,22 +20,18 @@ runCommand "tailnet-identity-test" { nativeBuildInputs = [ caddy curl python3 ];
   {
     printf '{\n\tauto_https off\n\tadmin off\n}\n\n'
     cat snippet
-    printf '\nhttp://127.0.0.1:8080 {\n\timport tailnet_identity\n'
+    printf '\nhttp://127.0.0.1:{$PORT} {\n\timport tailnet_identity\n'
     printf '\trespond "user=[{header.Remote-User}] ts=[{header.Tailscale-User}{header.Tailscale-User-Login}] auth=[{header.Authorization}]"\n}\n'
   } > Caddyfile
 
   echo user > mode
   : > lookups
-  python3 -I ${fakeAuth} "$PWD/whois.sock" mode lookups &
-  caddy run --config Caddyfile --adapter caddyfile > caddy.log 2>&1 &
-  for _ in $(seq 50); do
-    curl -s -o /dev/null http://127.0.0.1:8080/ && [ -S whois.sock ] && break
-    sleep 0.2
-  done
+  start_auth ${fakeAuth}
+  start_caddy PORT
 
   check() {
     want=$1; shift
-    got=$(curl -s -w ' %{http_code}' "$@" http://127.0.0.1:8080/)
+    got=$(get "$PORT" "$@")
     [ "$got" = "$want" ] || fail "curl $*: got '$got', want '$want'"
   }
 
@@ -61,6 +57,6 @@ runCommand "tailnet-identity-test" { nativeBuildInputs = [ caddy curl python3 ];
   echo unknown > mode
   check 'user=[] ts=[] auth=[] 200' -H 'Remote-User: mallory@github'
 
-  kill %1 %2
+  stop
   echo ok > $out
 ''
