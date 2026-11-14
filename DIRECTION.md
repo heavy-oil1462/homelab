@@ -91,7 +91,15 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   product (cue, fyr, podium, homelab, vaka) has its capabilities in fyr's
   homelab workspace, and vaka's longer-term initiatives are planned there;
   the supervisor keeps them current ("I want the capabilities to be in
-  there", owner, board, 2026-11-14).
+  there", owner, board, 2026-11-14). Cross-product work carries a `theme`
+  tag in fyr (today: Security, Sign-in, Reliability, Observability, Design
+  system), so it shows in the views "Products overview", "Cross-product
+  themes" and "Security and sign-in"; the supervisor tags new work and keeps
+  the statuses current ("Things like the security, OIDC stuff that are cross
+  products I would like some tags with views to follow that progress",
+  owner, board, 2026-11-14). A change to a product's UI updates that
+  repository's screenshots in its docs ("do add some screenshots in the docs
+  too so I can see the progress").
 - The supervisor creates and initializes new repositories for the domain
   when the work needs them, through podium's orchestrator (podium ADR-027,
   issue 01a1d8bb-e037; owner, board, 2026-11-14). They are created
