@@ -148,6 +148,17 @@ in
       description = "Hostname the fluent-bit logging agent ships journals to (TLS, port 443).";
     };
 
+    observabilityAgent.textfileDirectory = lib.mkOption {
+      type = lib.types.str;
+      default = "/var/lib/prometheus-node-exporter/textfile";
+      description = ''
+        Directory of the node exporter's textfile collector: it exports the
+        metrics in every *.prom file there. The observability-agent module
+        creates it; the backups module writes each job's last successful
+        run into it.
+      '';
+    };
+
     network.role = lib.mkOption {
       type = lib.types.enum [ "server" "workstation" "htpc" "custom" ];
       default = "custom";
