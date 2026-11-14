@@ -77,7 +77,11 @@ Services (OCI containers, pinned by digest):
   failed units, failed backups, backups with no success in 36 hours or
   none at all, full disks, hosts that are down,
   certificates that expire within 14 days and sites that are down or serve
-  an invalid certificate, through one placeholder contact point. Grafana
+  an invalid certificate, through one placeholder contact point. The
+  example dashboard `gpu.json` shows GPU load per instance from the NVIDIA
+  GPU exporters listed in `homelab.observability.nvidiaGpuTargets`, which
+  Prometheus reads from `/etc/prometheus/nvidia-gpu-targets.json` through
+  the example's nvidia-gpu job. Grafana
   gives anyone who reaches it anonymous Admin access, unless
   `homelab.observability.grafanaProxyAuth.enable` is set: then only the
   tailnet logins in `homelab.observability.grafanaProxyAuth.admins` sign in,
@@ -167,7 +171,10 @@ System:
   disko's NixOS module from your own flake, as `examples/vm.nix` shows),
   `tailscale`, `logging-agent`, `observability-agent` (node exporter with
   the systemd collector, and the textfile collector reading
-  `homelab.observabilityAgent.textfileDirectory`), and the desktop
+  `homelab.observabilityAgent.textfileDirectory`; with
+  `homelab.observabilityAgent.nvidiaGpu.enable`, also nixpkgs' NVIDIA GPU
+  exporter on port 9835, open on `tailscale0` only, which needs the `nvidia`
+  module and works on GeForce cards), and the desktop
   modules.
 - `tsidp` (`homelab.tsidp`): tsidp, Tailscale's OpenID Connect provider,
   with nixpkgs' `services.tsidp`, as its own tailnet node
