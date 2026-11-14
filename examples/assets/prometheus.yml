@@ -1,6 +1,7 @@
 # Example Prometheus config for the observability module. Targets use
 # RFC 5737 documentation addresses; replace them with your hosts' tailnet IPs
-# or names. node_exporter comes from the observability-agent module (port 9100).
+# or names. node_exporter comes from the observability-agent module (port 9100),
+# and so does the NVIDIA GPU exporter where it is enabled (port 9835).
 # The blackbox exporter comes from the observability module (port 9115).
 global:
   scrape_interval: 30s
@@ -15,6 +16,14 @@ scrape_configs:
       - targets:
           - "192.0.2.20:9100"
           - "192.0.2.21:9100"
+
+  # GPU load for the GPU dashboard. The exporters' addresses come from
+  # homelab.observability.nvidiaGpuTargets, which the observability module
+  # writes to /etc/prometheus/nvidia-gpu-targets.json; list hosts there,
+  # not here.
+  - job_name: nvidia-gpu
+    file_sd_configs:
+      - files: [/etc/prometheus/nvidia-gpu-targets.json]
 
   # Home Assistant metrics, authenticated with a long-lived token provisioned
   # at runtime (see the observability module; the file is mounted read-only).

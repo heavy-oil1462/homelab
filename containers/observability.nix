@@ -73,6 +73,12 @@ let
     { targets = cfg.probeTargets; }
   ]);
 
+  # The NVIDIA GPU exporters to scrape, as a file_sd file for the nvidia-gpu
+  # job in the same way.
+  nvidiaGpuTargets = pkgs.writeText "nvidia-gpu-targets.json" (builtins.toJSON [
+    { targets = cfg.nvidiaGpuTargets; }
+  ]);
+
   # The default podman network's bridge, as the NixOS podman module defines
   # it. The Prometheus container reaches the host's blackbox exporter here.
   podmanBridge = "podman0";
@@ -178,6 +184,7 @@ in
         # it readable by the prometheus container uid.
         "/var/lib/secrets/ha-prometheus-token:/etc/prometheus/ha-token:ro"
         "${probeTargets}:/etc/prometheus/probe-targets.json:ro"
+        "${nvidiaGpuTargets}:/etc/prometheus/nvidia-gpu-targets.json:ro"
       ];
     };
 

@@ -159,6 +159,18 @@ in
       '';
     };
 
+    observabilityAgent.nvidiaGpu.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Run nixpkgs' NVIDIA GPU exporter (nvidia_gpu_exporter, which reads
+        nvidia-smi and works on consumer GeForce cards) on port 9835, open
+        on tailscale0 only. Its metrics are named nvidia_smi_* with a uuid
+        label per GPU, as the example GPU dashboard expects. Needs the
+        driver from the nvidia module.
+      '';
+    };
+
     network.role = lib.mkOption {
       type = lib.types.enum [ "server" "workstation" "htpc" "custom" ];
       default = "custom";
@@ -353,6 +365,18 @@ in
           Prometheus reads the list from
           /etc/prometheus/probe-targets.json (file_sd); the blackbox job in
           prometheus.yml points at it.
+        '';
+      };
+      nvidiaGpuTargets = lib.mkOption {
+        type = lib.types.listOf (lib.types.strMatching ".+:[0-9]+");
+        default = [ ];
+        example = [ "192.0.2.20:9835" ];
+        description = ''
+          host:port of the NVIDIA GPU exporters to scrape, the hosts with
+          homelab.observabilityAgent.nvidiaGpu.enable, at addresses the
+          Prometheus container reaches over the tailnet. Prometheus reads the
+          list from /etc/prometheus/nvidia-gpu-targets.json (file_sd); the
+          nvidia-gpu job in prometheus.yml points at it.
         '';
       };
       grafanaProxyAuth = {

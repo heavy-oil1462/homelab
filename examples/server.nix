@@ -2,7 +2,7 @@
 # flake's checks to prove the module set evaluates standalone; copy it as a
 # starting point for your own host. All values here are placeholders and all
 # IPs are from the RFC 5737 documentation ranges.
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
 {
   imports = [
@@ -11,6 +11,7 @@
     ../modules/acme.nix
     ../modules/backups.nix
     ../modules/tsidp.nix
+    ../modules/nvidia.nix
     ../containers/reverse-proxy.nix
     ../containers/observability.nix
     ../containers/vaultwarden.nix
@@ -30,6 +31,10 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPlaceholderPlaceholderPlaceholder0000000000A alice@example"
     ];
     tailnetIp = "100.64.0.1";
+    # GPU load for the GPU dashboard, from the NVIDIA driver the nvidia module
+    # installs. Prometheus scrapes it on port 9835 over the tailnet, through
+    # observability.nvidiaGpuTargets below.
+    observabilityAgent.nvidiaGpu.enable = true;
     backups = {
       resticRepo = "rclone:remote:homelab-backup";
       # Forgejo's data dir is /var/lib/gitea in the container, and the
@@ -64,6 +69,9 @@
         "https://vault.home.example.com"
         "https://status.home.example.com/api/health"
       ];
+      # The NVIDIA GPU exporters of hosts with
+      # homelab.observabilityAgent.nvidiaGpu.enable, by tailnet address.
+      nvidiaGpuTargets = [ "192.0.2.20:9835" ];
       grafanaOidc = {
         enable = true;
         issuer = "https://idp.tailnet.invalid";
@@ -96,6 +104,14 @@
   };
 
   networking.hostName = "example-server";
+
+  # The NVIDIA driver from the nvidia module is unfree; allow exactly its
+  # packages.
+  nixpkgs.config.allowUnfreePredicate = pkg:
+    builtins.elem (lib.getName pkg) [
+      "nvidia-x11"
+      "nvidia-settings"
+    ];
 
   boot.loader.grub.devices = [ "nodev" ];
   fileSystems."/" = {
