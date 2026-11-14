@@ -145,6 +145,19 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   close, not the design ("can forgejo and grafana OIDC be configured from
   the nix config instead of manually in the UI?", owner, board,
   2026-11-14; ADR-0010).
+- The site keeps a printable recovery card for total server loss,
+  homelab-config's `scripts/recovery-card.py` (issue 01a1dbef-dcd9): the
+  commands, URLs and secrets needed to get up again ("make a script for
+  homelab to create a recovery card. It should have all the information I
+  would need to get up again from a total server loss … take secrets such
+  as restic backup password as input when the script is run … A QR code I
+  can scan with phone", owner, board, 2026-11-14). The card is generated
+  from the configuration, so it stays current. Secrets are taken only
+  when the script runs and are shown as text and QR codes, never
+  committed. It assumes the owner reaches their Google account unaided
+  ("It is safe to assume that I will be able to access my google account
+  myself without any help"). A change that adds a service, a backup job
+  or a secret keeps the card generator in step.
 - Verify with `nix flake check`. A new module or option must be used by an
   example host so the check evaluates it.
 - A new or changed module updates the README module list, and the example
