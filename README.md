@@ -74,7 +74,8 @@ Services (OCI containers, pinned by digest):
   reach them; it listens on the podman bridge only. The host must resolve the
   site names to Caddy's tailnet address (with Tailscale DNS, a split-DNS
   record for the domain). `examples/assets/grafana-alerting.yaml` alerts on
-  failed units, failed or stale backups, full disks, hosts that are down,
+  failed units, failed backups, backups with no success in 36 hours or
+  none at all, full disks, hosts that are down,
   certificates that expire within 14 days and sites that are down or serve
   an invalid certificate, through one placeholder contact point. Grafana
   gives anyone who reaches it anonymous Admin access, unless
@@ -157,13 +158,16 @@ System:
 - `common` (auto-upgrade, GC, flakes, user, firewall), `openssh` (keys from
   `homelab.adminKeys`), `acme` (Cloudflare DNS-01), `backups` (restic to any
   rclone remote: Vaultwarden, plus the jobs in `homelab.backups.jobs`, with
-  consistent SQLite snapshots; restoring is in
-  [docs/backups.md](docs/backups.md)), `locale`, `yubikey` (pam_u2f with a
+  consistent SQLite snapshots, and each job's last successful run as a
+  node exporter metric; restoring is in [docs/backups.md](docs/backups.md)),
+  `locale`, `yubikey` (pam_u2f with a
   host-independent origin), `firewall` (role-based baseline), `nvidia` (proprietary driver;
   the host must allow the unfree `nvidia-x11` and `nvidia-settings`, as
   `examples/workstation.nix` does), `vm-disko` (single-disk VM layout; needs
   disko's NixOS module from your own flake, as `examples/vm.nix` shows),
-  `tailscale`, `logging-agent`, `observability-agent`, and the desktop
+  `tailscale`, `logging-agent`, `observability-agent` (node exporter with
+  the systemd collector, and the textfile collector reading
+  `homelab.observabilityAgent.textfileDirectory`), and the desktop
   modules.
 - `tsidp` (`homelab.tsidp`): tsidp, Tailscale's OpenID Connect provider,
   with nixpkgs' `services.tsidp`, as its own tailnet node

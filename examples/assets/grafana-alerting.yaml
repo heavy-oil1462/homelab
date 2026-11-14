@@ -7,8 +7,8 @@
 #
 # The rules query the provisioned Prometheus datasource, whose uid is fixed to
 # "Prometheus" in containers/observability.nix. They need the node exporter
-# (modules/observability-agent.nix, systemd collector on) scraped as the job
-# "node-exporter", as in examples/assets/prometheus.yml. The certificate and
+# (modules/observability-agent.nix, with its systemd and textfile collectors)
+# scraped as the job "node-exporter", as in examples/assets/prometheus.yml. The certificate and
 # site rules need the blackbox exporter (containers/observability.nix)
 # scraped as the job "blackbox", also as in that file.
 #
@@ -93,16 +93,18 @@ groups:
             Check the run with: journalctl -u {{ $labels.name }}.
             Restoring is described in docs/backups.md.
 
-      # A backup that has not run for 26 hours. node exporter has no "last
-      # successful run" metric, but its systemd collector exports each timer's
-      # last trigger time. A run that was triggered and failed is caught by
-      # "Failed backup" above, so together the two rules mean "no successful
-      # backup in 26h". 26h fits the default daily schedule with slack; raise
-      # it if a job runs less often (homelab.backups.jobs.<name>.schedule).
-      # A timer that never fired reports 0, so a new host alerts until the
-      # first run of each job.
+      # A backup with no successful run in 36 hours. After each successful
+      # run modules/backups.nix writes the time into
+      # homelab_backup_last_success_timestamp_seconds{backup_job="<name>"},
+      # through the node exporter's textfile collector. This catches a job
+      # that fails and one that stopped running: its timer gone or stopped,
+      # or the host down at the run time and not caught up. Only jobs the
+      # host still declares (homelab_backup_job_info) count, so a removed
+      # job's leftover metric does not alert. 36h fits the default daily
+      # schedule with slack; raise it if a job runs less often
+      # (homelab.backups.jobs.<name>.schedule).
       - uid: homelab-backup-stale
-        title: Backup not run in 26h
+        title: Backup stale
         condition: C
         data:
           - refId: A
@@ -112,7 +114,8 @@ groups:
               refId: A
               instant: true
               expr: |-
-                time() - node_systemd_timer_last_trigger_seconds{name=~"restic-backups-.+\\.timer"}
+                (time() - homelab_backup_last_success_timestamp_seconds)
+                  and on (instance, backup_job) homelab_backup_job_info
           - refId: C
             datasourceUid: __expr__
             model:
@@ -120,16 +123,57 @@ groups:
               type: threshold
               expression: A
               conditions:
-                - evaluator: { type: gt, params: [93600] } # 26h in seconds
+                - evaluator: { type: gt, params: [129600] } # 36h in seconds
         noDataState: OK
         execErrState: Error
-        for: 15m
+        for: 1h
         labels:
           severity: critical
         annotations:
-          summary: "Backup {{ $labels.name }} on {{ $labels.instance }} has not run in 26h"
+          summary: "Backup {{ $labels.backup_job }} on {{ $labels.instance }} has not succeeded in {{ humanizeDuration $values.A.Value }}"
           description: >-
-            Check the timer with: systemctl list-timers 'restic-backups-*'
+            Check the timer and the last run with:
+            systemctl list-timers 'restic-backups-*' and
+            journalctl -u restic-backups-{{ $labels.backup_job }}
+
+      # A declared backup job that has never succeeded on this host: it is
+      # in homelab_backup_job_info but has no last success metric. Held for
+      # 36h like "Backup stale", so a new job, or every job right after the
+      # upgrade that added the metric, has its first scheduled run before
+      # this fires. Run a new job once by hand to see it pass sooner
+      # (docs/backups.md).
+      - uid: homelab-backup-never-ran
+        title: Backup never ran
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                homelab_backup_job_info
+                  unless on (instance, backup_job) homelab_backup_last_success_timestamp_seconds
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 36h
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup {{ $labels.backup_job }} on {{ $labels.instance }} has never succeeded"
+          description: >-
+            Run it once and read its log:
+            systemctl start restic-backups-{{ $labels.backup_job }};
+            journalctl -u restic-backups-{{ $labels.backup_job }}
 
       # Filesystem more than 90% full. tmpfs, overlay (container layers) and
       # squashfs are left out. Frigate's /surveillance volume runs full by

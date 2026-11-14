@@ -39,3 +39,5 @@ Status is one of:
   mounts (Accepted)
 - [ADR-0006](0006-tsidp-for-oidc-sign-in.md): Forgejo and Grafana sign in
   through tsidp, the tailnet's OIDC provider (Accepted)
+- [ADR-0007](0007-backup-freshness-textfile-metric.md): Backup freshness is
+  a node exporter textfile metric written by each job (Proposed)

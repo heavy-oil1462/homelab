@@ -24,6 +24,48 @@ repositories with `git fsck` after a restore, as below.
 
 Retention is 7 daily, 4 weekly, 6 monthly and 1 yearly snapshot per job.
 
+## Freshness metric
+
+A failed run leaves a failed unit, but a job that does not run at all (its
+timer stopped or removed, the host down at the run time) fails nothing. So
+after every successful run, that is when the backup and the pruning both
+succeeded, the job writes two metrics for the node exporter's textfile
+collector (`modules/observability-agent.nix`), into
+`homelab.observabilityAgent.textfileDirectory`
+(`/var/lib/prometheus-node-exporter/textfile`):
+
+- `homelab_backup_last_success_timestamp_seconds{backup_job="<job>"}`: the
+  Unix time the run finished.
+- `homelab_backup_last_success_size_bytes{backup_job="<job>"}`: the size of
+  the files the run backed up, from the summary restic keeps in the
+  snapshot. It is left out when restic cannot list the snapshot right after
+  the run.
+
+The host also exports `homelab_backup_job_info{backup_job="<job>"} 1` for
+every job it declares, Vaultwarden's included, whether or not it has run.
+The label is `backup_job` because Prometheus sets `job` to the scrape job,
+`node-exporter`. A job that never succeeded has an info series and no
+timestamp; a job removed from the config keeps its last timestamp file but
+loses its info series.
+
+`examples/assets/grafana-alerting.yaml` alerts on both: "Backup stale" when a
+declared job's last success is more than 36 hours old, held for an hour, and
+"Backup never ran" when a declared job has had no success for 36 hours. A
+job on a schedule longer than daily needs a higher threshold in your copy.
+
+To check on the host:
+
+```sh
+cat /var/lib/prometheus-node-exporter/textfile/homelab_backup_*.prom
+curl -s localhost:9100/metrics | grep '^homelab_backup_'
+```
+
+and in Prometheus, the hours since each job last succeeded:
+
+```promql
+(time() - homelab_backup_last_success_timestamp_seconds) / 3600
+```
+
 ## Commands
 
 Every job installs a wrapper, `restic-<job>`, that runs restic with the
@@ -164,3 +206,7 @@ systemctl start restic-backups-forgejo
 journalctl -u restic-backups-forgejo -n 50
 restic-forgejo snapshots --tag forgejo
 ```
+
+The run updates the job's metric file, so
+`/var/lib/prometheus-node-exporter/textfile/homelab_backup_forgejo.prom`
+has a new timestamp and "Backup never ran" will not fire for it.
