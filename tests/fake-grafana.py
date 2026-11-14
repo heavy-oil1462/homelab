@@ -1,11 +1,14 @@
 """A stand-in for Grafana's provisioning API, for tests/grafana-git-sync.nix.
 
-    python3 fake-grafana.py <port> <API token> <directory>
+    python3 fake-grafana.py <port file> <API token> <directory>
 
-Answers /api/health, and GET, POST and PUT of one Repository resource and
-its /test under /apis/provisioning.grafana.app/v0alpha1/namespaces/default/
-repositories, for requests with the API token. Keeps its state in files in
-<directory>, which the test reads and changes:
+Listens on a free port of 127.0.0.1 and writes its number to <port file>
+once it accepts connections, so a test never clashes with another
+listener, which a fixed port can outside the build sandbox. Answers
+/api/health, and GET, POST and PUT of one Repository resource and its
+/test under /apis/provisioning.grafana.app/v0alpha1/namespaces/default/
+repositories, for requests with the API token. Keeps its state in files
+in <directory>, which the test reads and changes:
 
 - repository.json: the resource as Grafana keeps it, without the secure
   part; absent until created. Its resourceVersion goes up on every write,
@@ -15,16 +18,18 @@ repositories, for requests with the API token. Keeps its state in files in
 - bad-token: while it exists, /test fails as Grafana does for a token the
   Git server refuses.
 - down: while it exists, /api/health answers 503.
+- stall: while it exists, /api/health answers only after 30 seconds.
 """
 
 import json
 import os
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PREFIX = "/apis/provisioning.grafana.app/v0alpha1/namespaces/default/repositories"
 
-port, api_token, state = int(sys.argv[1]), sys.argv[2], sys.argv[3]
+port_file, api_token, state = sys.argv[1], sys.argv[2], sys.argv[3]
 
 
 def path(name):
@@ -32,6 +37,9 @@ def path(name):
 
 
 class Handler(BaseHTTPRequestHandler):
+    # A client that stops sending does not keep its thread for good.
+    timeout = 10
+
     def log_message(self, *args):
         pass
 
@@ -49,6 +57,8 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
         if self.path == "/api/health":
+            if os.path.exists(path("stall")):
+                time.sleep(30)
             if os.path.exists(path("down")):
                 return self.answer(503, {"database": "failing"})
             return self.answer(200, {"database": "ok"})
@@ -118,4 +128,9 @@ class Handler(BaseHTTPRequestHandler):
         self.handle_any("PUT")
 
 
-HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+# A thread per request, so a stalled answer holds up no other request.
+server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+with open(port_file + ".new", "w") as f:
+    f.write(f"{server.server_port}\n")
+os.rename(port_file + ".new", port_file)
+server.serve_forever()

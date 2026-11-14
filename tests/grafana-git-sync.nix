@@ -2,7 +2,14 @@
 # stand-in for Grafana's provisioning API: a first run creates the
 # repository, a run with nothing to do changes nothing, a spec changed in
 # Grafana and a new token each replace it, and a refused Git token, a
-# refused or missing API token and a Grafana that does not answer fail.
+# refused or missing API token, a Grafana that does not answer and one that
+# never finishes answering fail.
+#
+# Nothing here may outlive or stall the build. Outside the build sandbox,
+# as in CI, Nix waits until every process holding the build's output has
+# closed it, so the stand-in logs to a file and is killed at the end; it
+# listens on a free port, and its start and every run of the script have
+# a deadline.
 { runCommand, callPackage, runtimeShell, python3, jq }:
 
 let
@@ -13,7 +20,12 @@ runCommand "grafana-git-sync-test" { nativeBuildInputs = [ python3 jq ]; } ''
   mkdir bin fake
   export PATH=$PWD/bin:$PATH STUB=$PWD
   export GRAFANA_GIT_SYNC_TRIES=3 GRAFANA_GIT_SYNC_WAIT=0
-  fail() { echo "FAIL: $*" >&2; exit 1; }
+  fake=
+  fail() {
+    echo "FAIL: $*" >&2
+    [ -z "$fake" ] || kill "$fake" 2> /dev/null || true
+    exit 1
+  }
 
   # podman gives the grafana container's address, 127.0.0.1, where the
   # stand-in listens.
@@ -38,15 +50,23 @@ runCommand "grafana-git-sync-test" { nativeBuildInputs = [ python3 jq ]; } ''
      "workflows":["write"]}}
   EOF
 
-  python3 -I ${./fake-grafana.py} 3000 api-token-1 fake &
+  python3 -I ${./fake-grafana.py} port api-token-1 fake > fake.log 2>&1 &
+  fake=$!
   for _ in $(seq 50); do
-    python3 -I -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:3000/api/health")' 2>/dev/null && break
+    [ -s port ] && break
+    kill -0 "$fake" 2> /dev/null || { cat fake.log; fail "the stand-in for Grafana exited"; }
     sleep 0.2
   done
+  [ -s port ] || { cat fake.log; fail "the stand-in for Grafana did not start in 10 seconds"; }
+  export GRAFANA_GIT_SYNC_PORT=$(cat port)
 
+  # Each run gets 60 seconds.
   run() {
     : > fake/requests
-    ${script}/bin/grafana-git-sync grafana repository.json token api-token state > out 2> err
+    local status=0
+    timeout 60 ${script}/bin/grafana-git-sync grafana repository.json token api-token state > out 2> err || status=$?
+    [ "$status" -ne 124 ] || { cat out err; fail "the script did not finish in 60 seconds"; }
+    return "$status"
   }
   writes() { grep -c '^\(POST\|PUT\) .*/repositories\(/homelab-dashboards\)\?$' fake/requests || true; }
 
@@ -107,11 +127,19 @@ runCommand "grafana-git-sync-test" { nativeBuildInputs = [ python3 jq ]; } ''
   grep -q "did not answer" err || fail "down: no clear error: $(cat err)"
   rm fake/down
 
+  # Grafana takes the connection but does not answer: each try gives up
+  # after 5 seconds, and the run fails well within its 60.
+  touch fake/stall
+  if run; then fail "stall: succeeded"; fi
+  grep -q "did not answer" err || fail "stall: no clear error: $(cat err)"
+  rm fake/stall
+
   # A new host, where Grafana has no repository yet but the state file is
   # left from before: created again.
   rm fake/repository.json
   run || { cat out err; fail "recreate: failed"; }
   grep -q '^POST ' fake/requests || fail "recreate: not created"
 
+  kill "$fake"
   echo ok > $out
 ''

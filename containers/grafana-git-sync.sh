@@ -14,7 +14,11 @@
 # Both tokens stay off command lines: the API token goes to curl as a
 # header file, the Git token inside the request body on stdin.
 # GRAFANA_GIT_SYNC_TRIES (60) and GRAFANA_GIT_SYNC_WAIT (5 seconds) set how
-# long it waits.
+# long it waits, GRAFANA_GIT_SYNC_PORT (3000) where Grafana listens.
+#
+# Nothing waits without a deadline: podman gets 10 seconds a try, each
+# health check 5, each API call 60, so a run that fails ends after about
+# 23 minutes at the defaults, within the unit's TimeoutStartSec.
 
 if [ "$#" -ne 5 ]; then
   echo "usage: grafana-git-sync <container> <repository JSON> <token file> <API token file> <state file>" >&2
@@ -27,6 +31,7 @@ api_token_file=$4
 state=$5
 tries=${GRAFANA_GIT_SYNC_TRIES:-60}
 delay=${GRAFANA_GIT_SYNC_WAIT:-5}
+port=${GRAFANA_GIT_SYNC_PORT:-3000}
 
 if ! token=$(cat "$token_file") || [ -z "$token" ]; then
   echo "The Git token file $token_file is missing or empty; the repository is not set up." >&2
@@ -44,11 +49,11 @@ trap 'rm -rf "$work"' EXIT
 # Grafana's address on podman's network, and whether it answers there.
 grafana_up() {
   local address
-  address=$(podman inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$container") || return 1
+  address=$(timeout 10 podman inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$container") || return 1
   address=${address%% *}
   [ -n "$address" ] || return 1
-  base=http://$address:3000
-  curl -fsS -o /dev/null "$base/api/health"
+  base=http://$address:$port
+  curl -fsS --connect-timeout 5 --max-time 5 -o /dev/null "$base/api/health"
 }
 
 try=1
@@ -65,7 +70,7 @@ api=$base/apis/provisioning.grafana.app/v0alpha1/namespaces/default/repositories
 # Calls the API, with a request body on stdin when given --data-binary @-.
 # Leaves the answer in $work/answer and prints the status code.
 call() {
-  curl -sS -o "$work/answer" -w '%{http_code}' \
+  curl -sS --connect-timeout 10 --max-time 60 -o "$work/answer" -w '%{http_code}' \
     -H @<(printf 'Authorization: Bearer %s\nContent-Type: application/json\n' "$api_token") \
     "$@"
 }
