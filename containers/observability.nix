@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, utils, ... }:
 
 let
   cfg = config.homelab.observability;
@@ -84,6 +84,17 @@ let
   podmanBridge = "podman0";
   podmanGateway = "10.88.0.1";
 
+  # Dashboards from a Git repository (docs/adr/0008-dashboards-synced-from-git.md):
+  # the grafana-dashboards-sync unit copies them into liveDashboards, which
+  # the container mounts in place of dashboardsDir.
+  git = cfg.dashboardsGit;
+  syncScript = pkgs.callPackage ./grafana-dashboards-sync.nix { };
+  syncState = "/var/lib/grafana-dashboards";
+  liveDashboards = "${syncState}/live";
+  dashboardsSource = if git.enable then liveDashboards else cfg.dashboardsDir;
+
+  # The repository is the source of truth for synced dashboards, so Grafana
+  # does not let them be saved; edits are exported and committed.
   grafanaDashboards = pkgs.writeText "dashboards.yml" ''
     apiVersion: 1
     providers:
@@ -92,7 +103,8 @@ let
         folder: 'Homelab'
         type: file
         disableDeletion: false
-        updateIntervalSeconds: 10
+        updateIntervalSeconds: ${if git.enable then "30" else "10"}
+        allowUiUpdates: false
         options:
           path: /etc/grafana/dashboards
   '';
@@ -104,6 +116,10 @@ in
     {
       assertion = !cfg.grafanaProxyAuth.enable || proxyAddress != null;
       message = "homelab.observability.grafanaProxyAuth trusts Remote-User from homelab.reverseProxy.address, which is null.";
+    }
+    {
+      assertion = git.enable != (cfg.dashboardsDir != null);
+      message = "Set one of homelab.observability.dashboardsDir and homelab.observability.dashboardsGit.enable: Grafana's dashboards come from one or the other.";
     }
     {
       assertion = !(cfg.grafanaProxyAuth.enable && oidc.enable);
@@ -139,12 +155,55 @@ in
   # written.
   systemd.tmpfiles.rules = [
     "f /var/lib/secrets/ha-prometheus-token 0640 prometheus prometheus -"
+  ] ++ lib.optionals git.enable [
+    # The synced dashboards, readable by the grafana container; the sync's
+    # state, with its fetched repository, by root only. The live directory
+    # exists before the first sync, so the container mounts a directory.
+    "d ${syncState} 0755 root root -"
+    "d ${syncState}/state 0700 root root -"
+    "d ${liveDashboards} 0755 root root -"
   ] ++ lib.optionals oidc.enable [
     # The same for the OIDC client's id and secret, which Grafana's
     # container reads: missing, sign in fails and Grafana runs.
     "f ${oidc.clientIdFile} 0400 grafana grafana -"
     "f ${oidc.clientSecretFile} 0400 grafana grafana -"
   ];
+
+  # Fetch the dashboards every interval and copy them into place once they
+  # check out. A failed run leaves the unit failed, which the failed unit
+  # rule alerts on, until a run succeeds; Grafana keeps the last good set.
+  systemd.services.grafana-dashboards-sync = lib.mkIf git.enable {
+    description = "Sync Grafana's dashboards from Git";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = utils.escapeSystemdExecArgs [
+        "${syncScript}/bin/grafana-dashboards-sync"
+        git.url
+        git.branch
+        git.path
+        git.keyFile
+        "${syncState}/state"
+        liveDashboards
+      ];
+      UMask = "0022";
+      ProtectSystem = "strict";
+      ReadWritePaths = [ syncState ];
+      ProtectHome = true;
+      PrivateTmp = true;
+      PrivateDevices = true;
+      NoNewPrivileges = true;
+    };
+  };
+
+  systemd.timers.grafana-dashboards-sync = lib.mkIf git.enable {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "1min";
+      OnUnitActiveSec = git.interval;
+    };
+  };
 
   # The blackbox exporter runs on the host, next to Prometheus, so the sites
   # are probed once, from the host that alerts on them. It listens on the
@@ -207,7 +266,7 @@ in
         "${grafanaDatasources}:/etc/grafana/provisioning/datasources/datasources.yml:ro"
         "${grafanaDashboards}:/etc/grafana/provisioning/dashboards/dashboards.yml:ro"
         "${grafanaAlerting}:/etc/grafana/provisioning/alerting/alerting.yaml:ro"
-        "${cfg.dashboardsDir}:/etc/grafana/dashboards:ro"
+        "${dashboardsSource}:/etc/grafana/dashboards:ro"
       ] ++ lib.optionals oidc.enable [
         "${oidc.clientIdFile}:/run/secrets/oidc-client-id:ro"
         "${oidc.clientSecretFile}:/run/secrets/oidc-client-secret:ro"

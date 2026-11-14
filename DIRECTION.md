@@ -121,6 +121,10 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   podium can use in the future, for now just vaka should use it", owner,
   board, 2026-11-14): vaka now; cue, fyr and podium when the owner says
   so. A change to sign-in is made there first.
+- Dashboards are edited in Git and reach Grafana without a deploy
+  ("start provisioning my grafana dashboards directly from forgejo so they
+  can be updated easily without deploy", owner, board, 2026-11-14;
+  ADR-0008).
 - Verify with `nix flake check`. A new module or option must be used by an
   example host so the check evaluates it.
 - A new or changed module updates the README module list, and the example

@@ -41,3 +41,5 @@ Status is one of:
   through tsidp, the tailnet's OIDC provider (Accepted)
 - [ADR-0007](0007-backup-freshness-textfile-metric.md): Backup freshness is
   a node exporter textfile metric written by each job (Proposed)
+- [ADR-0008](0008-dashboards-synced-from-git.md): Grafana's dashboards are
+  synced from a Git repository by a timer on the host (Accepted)
