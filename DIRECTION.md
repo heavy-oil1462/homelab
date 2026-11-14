@@ -15,9 +15,10 @@ read-only observability skills for the stack it deploys.
 This repository is the home of the Homelab domain, which the team works
 across: homelab, homelab-config (the owner's private site configuration),
 vaka (homelab/vaka, a NixOS-native camera system meant to replace
-Frigate), dev/cue, dev/fyr and dev/podium, and dev/design-system (the
+Frigate), dev/cue, dev/fyr and dev/podium, dev/design-system (the
 shared look, tokens and Preact components, of cue, fyr, podium and
-vaka). Each has its own DIRECTION.md where it has one, and that decides
+vaka), and dev/oidc (the shared OpenID Connect sign-in package for the
+domain's Go services). Each has its own DIRECTION.md where it has one, and that decides
 work in its repository.
 
 ## Guiding principles
@@ -107,6 +108,11 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   should all have same feel", owner, board, 2026-11-14): vaka from the
   start, so its modules can be reused; cue, fyr and podium when the owner
   says so. A change to the shared look is made there first.
+- Go services that sign users in through OIDC (tsidp, ADR-0006) use
+  dev/oidc ("Start work on a generic oidc client module that fyr, cue and
+  podium can use in the future, for now just vaka should use it", owner,
+  board, 2026-11-14): vaka now; cue, fyr and podium when the owner says
+  so. A change to sign-in is made there first.
 - Verify with `nix flake check`. A new module or option must be used by an
   example host so the check evaluates it.
 - A new or changed module updates the README module list, and the example
