@@ -17,9 +17,18 @@ jobs:
     env:
       # The job runs in an unprivileged container, where the Nix build
       # sandbox cannot set up its namespaces, so it is turned off here.
+      #
+      # build-users-group is empty, so the job's builds run as the
+      # container's root rather than as nixbld1. The job container shares
+      # the runner host's uids, so its nixbld1 is the host's uid 30001.
+      # Agent containers on the same host build through the host's
+      # nix-daemon, which kills every process of its build users before
+      # each build, and so killed CI's builder mid-build. This is a stopgap
+      # until the runner is fixed (homelab-config issue 01a1db56-b4d9).
       NIX_CONFIG: |
         experimental-features = nix-command flakes
         sandbox = false
+        build-users-group =
     steps:
       # nixos/nix has no node, so actions/checkout cannot run in it:
       # check out the commit with plain git and the job token.
