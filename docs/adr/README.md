@@ -45,4 +45,4 @@ Status is one of:
   synced from a Git repository by a timer on the host (Accepted)
 - [ADR-0010](0010-tsidp-clients-declared-in-nix.md): tsidp's OIDC clients
   are declared in Nix and written into its clients file before it starts
-  (Proposed)
+  (Accepted)

@@ -1,6 +1,6 @@
 # ADR-0010: tsidp's OIDC clients are declared in Nix and written into its clients file before it starts
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 
