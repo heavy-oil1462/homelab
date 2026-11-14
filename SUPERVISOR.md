@@ -74,3 +74,16 @@ something is waiting for my approval. Can that be made more clear".
   with no review event reaching the supervisor. Each session, list
   in_review issues and review any whose change set is waiting, rather than
   relying on events alone.
+- 2026-11-14: four times today (podium ADR-028, vaka ADR-0003, homelab
+  ADR-0010, vaka ADR-0006) a worker wrote an ADR as Proposed for a
+  decision the owner or the supervisor had already made, and each cost a
+  review round: podium gives workers only Accepted ADRs, so a Proposed one
+  never reaches later work.
+  - An issue that asks for an ADR says its Status. **Accepted** when the
+    owner directed it or the supervisor decides it in the issue.
+    **Proposed** only when the ADR is a proposal the owner must still
+    accept, and then the issue says so.
+  - A worker who adds an ADR for its own implementation decisions within
+    the issue's scope writes it Accepted and names it in the summary for
+    the supervisor to confirm. The supervisor sends it back only if it
+    disagrees with a decision.
