@@ -7,6 +7,40 @@ let
   # alice@example.com. Restricted to characters that need no quoting in the
   # Caddyfile snippets built from them.
   tailnetLogin = lib.types.strMatching "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+";
+
+  # A service's sign in through an OpenID Connect provider such as tsidp
+  # (docs/adr/0006-tsidp-for-oidc-sign-in.md). The client id and secret are
+  # runtime files, never in the store.
+  oidcClientOptions = { service, redirect, secretPrefix }: {
+    enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Sign in to ${service} through the OpenID Connect provider at the
+        issuer URL, usually tsidp (homelab.tsidp). Register a client for it
+        there with the redirect URI ${redirect}, and put its id and secret
+        in the two files below.
+      '';
+    };
+    issuer = lib.mkOption {
+      type = lib.types.strMatching "https://[^/]+(/.*[^/])?";
+      example = "https://idp.tailnet.invalid";
+      description = ''
+        The provider's issuer URL, without a trailing slash. For tsidp it is
+        https://<homelab.tsidp.hostName>.<tailnet>.ts.net.
+      '';
+    };
+    clientIdFile = lib.mkOption {
+      type = lib.types.str;
+      default = "/var/lib/secrets/${secretPrefix}-client-id";
+      description = "File holding the client id the provider gave ${service}, provisioned out of band.";
+    };
+    clientSecretFile = lib.mkOption {
+      type = lib.types.str;
+      default = "/var/lib/secrets/${secretPrefix}-client-secret";
+      description = "File holding the client secret the provider gave ${service}, provisioned out of band.";
+    };
+  };
 in
 {
   options.homelab = {
@@ -337,6 +371,24 @@ in
           '';
         };
       };
+      grafanaOidc = oidcClientOptions {
+        service = "Grafana";
+        redirect = "https://status.<domain>/login/generic_oauth";
+        secretPrefix = "grafana-oidc";
+      } // {
+        admins = lib.mkOption {
+          type = lib.types.listOf tailnetLogin;
+          default = [ ];
+          example = [ "alice@github" ];
+          description = ''
+            Tailnet logins that sign in to Grafana, all with the Admin role
+            in the main organisation. Grafana refuses everyone else. tsidp
+            passes the login as the email claim, with its own name appended
+            to GitHub and passkey logins (alice@github.idp.<tailnet>.ts.net);
+            the module matches both forms.
+          '';
+        };
+      };
     };
 
     homeassistant = {
@@ -468,6 +520,56 @@ in
             (alice@github). Caddy passes no identity for logins not listed.
           '';
         };
+      };
+      oidc = oidcClientOptions {
+        service = "Forgejo";
+        redirect = "https://git.<domain>/user/oauth2/tailscale/callback";
+        secretPrefix = "forgejo-oidc";
+      };
+    };
+
+    tsidp = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Run tsidp, Tailscale's OpenID Connect provider, as its own tailnet
+          node, with nixpkgs' services.tsidp. Its users are the tailnet's
+          users; Forgejo and Grafana sign in through it with
+          homelab.forgejo.oidc and homelab.observability.grafanaOidc
+          (docs/adr/0006-tsidp-for-oidc-sign-in.md). It listens on its own
+          node only, never on the host's interfaces.
+        '';
+      };
+      hostName = lib.mkOption {
+        type = lib.types.strMatching "[a-z0-9]([a-z0-9-]*[a-z0-9])?";
+        default = "idp";
+        description = ''
+          tsidp's machine name on the tailnet. Its issuer URL is
+          https://<hostName>.<tailnet>.ts.net.
+        '';
+      };
+      authKeyFile = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/lib/secrets/tsidp.env";
+        description = ''
+          Environment file with the Tailscale auth key tsidp joins the
+          tailnet with, as one line TS_AUTHKEY=tskey-auth-..., owned by root,
+          mode 0400. Only read while tsidp has no node state yet; tsidp does
+          not start while the file is missing.
+        '';
+      };
+      stateDir = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/lib/private/tsidp";
+        readOnly = true;
+        description = ''
+          Where tsidp keeps its node key, its signing keys and the clients
+          registered with it, as nixpkgs' module sets it (a DynamicUser
+          StateDirectory, linked from /var/lib/tsidp). Losing it signs every
+          client out and needs the clients registered again, so back it up
+          with a homelab.backups.jobs entry.
+        '';
       };
     };
 

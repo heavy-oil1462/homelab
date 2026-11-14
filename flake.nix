@@ -22,6 +22,7 @@
         modules = [ module ];
       };
       exampleServer = exampleHost ./examples/server.nix;
+      exampleServerProxyAuth = exampleHost ./examples/server-proxy-auth.nix;
       exampleWorkstation = exampleHost ./examples/workstation.nix;
       exampleVm = nixpkgs.lib.nixosSystem {
         inherit system;
@@ -50,6 +51,7 @@
         logging-agent = ./modules/logging-agent.nix;
         acme = ./modules/acme.nix;
         backups = ./modules/backups.nix;
+        tsidp = ./modules/tsidp.nix;
         nvidia = ./modules/nvidia.nix;
         vm-disko = ./modules/vm-disko.nix;
         yubikey = ./modules/yubikey.nix;
@@ -131,20 +133,24 @@
         # check stays a pure evaluation probe.
         example-server = pkgs.writeText "example-server-drv"
           (builtins.unsafeDiscardStringContext exampleServer.config.system.build.toplevel.drvPath);
+        example-server-proxy-auth = pkgs.writeText "example-server-proxy-auth-drv"
+          (builtins.unsafeDiscardStringContext exampleServerProxyAuth.config.system.build.toplevel.drvPath);
         example-workstation = pkgs.writeText "example-workstation-drv"
           (builtins.unsafeDiscardStringContext exampleWorkstation.config.system.build.toplevel.drvPath);
         example-vm = pkgs.writeText "example-vm-drv"
           (builtins.unsafeDiscardStringContext exampleVm.config.system.build.toplevel.drvPath);
         # The forgejo-admin unit's script against a stubbed podman.
         forgejo-admin = pkgs.callPackage ./tests/forgejo-admin.nix { };
+        # The forgejo-oidc unit's script against a stubbed podman and systemctl.
+        forgejo-oidc = pkgs.callPackage ./tests/forgejo-oidc.nix { };
         # The example Caddyfile's tailnet_identity snippet in a real Caddy.
         tailnet-identity = pkgs.callPackage ./tests/tailnet-identity.nix { };
         # The identity snippets the reverse proxy generates for the example
-        # server, in a real Caddy. The Caddyfile is the store path the caddy
+        # server on proxy authentication, in a real Caddy. The Caddyfile is the store path the caddy
         # container mounts; removeSuffix keeps its string context.
         identity-mapping = pkgs.callPackage ./tests/identity-mapping.nix {
           caddyfile = nixpkgs.lib.removeSuffix ":/etc/caddy/Caddyfile"
-            (builtins.head exampleServer.config.virtualisation.oci-containers.containers.caddy.volumes);
+            (builtins.head exampleServerProxyAuth.config.virtualisation.oci-containers.containers.caddy.volumes);
         };
       };
     };

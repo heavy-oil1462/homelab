@@ -37,3 +37,5 @@ Status is one of:
 - [ADR-0005](0005-proxy-auth-only-from-caddy.md): Services trust
   Remote-User only from Caddy, by its fixed address or a socket only Caddy
   mounts (Accepted)
+- [ADR-0006](0006-tsidp-for-oidc-sign-in.md): Forgejo and Grafana sign in
+  through tsidp, the tailnet's OIDC provider (Accepted)
