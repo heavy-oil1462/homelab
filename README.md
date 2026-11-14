@@ -105,7 +105,9 @@ Services (OCI containers, pinned by digest):
   both ways: a change pushed to the branch shows in Grafana within a
   minute, and a dashboard saved in Grafana is committed to the branch. The
   `grafana-git-sync` unit sets the repository up in Grafana through its
-  API, with a Forgejo token and a Grafana service account token. The
+  API, with a Forgejo token, and makes the Grafana service account and
+  token it calls the API with when it has none
+  (docs/adr/0012-git-sync-service-account-made-by-the-host.md). The
   repository must let Grafana push to the branch, so it is not a protected
   one. With `grafanaGitSync.seed`, a directory of dashboards, the unit
   first commits them to a repository that has no commits yet, once, and
@@ -241,7 +243,8 @@ starting a container or makes it create a directory in the file's place.
 | `forgejo-secret-key` | `forgejo` | forgejo, 0400 | Forgejo refuses to start |
 | `grafana-oidc-client-id`, `grafana-oidc-client-secret` | `observability`, with `grafanaOidc` | grafana, 0400 | written by tsidp for a client in `homelab.tsidp.clients`; otherwise Grafana runs and no one can sign in |
 | `forgejo-oidc-client-id`, `forgejo-oidc-client-secret` | `forgejo`, with `oidc` | root, 0400 | written by tsidp for a client in `homelab.tsidp.clients`; otherwise the `forgejo-oidc` unit fails and Forgejo runs without the sign in source |
-| `grafana-git-sync-token`, `grafana-git-sync-api-token` | `observability`, with `grafanaGitSync` | root, 0400 | the `grafana-git-sync` unit fails; Grafana keeps the repository it has, or has none on a new host |
+| `grafana-git-sync-token` | `observability`, with `grafanaGitSync` | root, 0400 | the `grafana-git-sync` unit fails; Grafana keeps the repository it has, or has none on a new host |
+| `grafana-git-sync-api-token` | `observability`, with `grafanaGitSync` | root, 0400 | written by the `grafana-git-sync` unit, with a new token of the service account `grafana-git-sync`, when missing or empty |
 | `tsidp.env` | `tsidp` | root, 0400 | missing, tsidp does not start, even once it has joined the tailnet; empty, a new tsidp prints a sign in link to its journal instead of joining |
 | `cloudflare.env` | `acme` | root | certificate renewal fails |
 | `restic-password`, `rclone.env` | `backups` | root | backups fail |

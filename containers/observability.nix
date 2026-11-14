@@ -135,6 +135,17 @@ let
       workflows = [ "write" ];
     };
   });
+  # The headers the grafana-git-sync unit signs in to Grafana with, as its
+  # built-in admin, to make the service account whose token it uses when
+  # apiTokenFile is empty (docs/adr/0012-git-sync-service-account-made-by-the-host.md).
+  # Grafana's proxy authentication takes them from 127.0.0.1 only, which
+  # in its container is Grafana itself, and root on the host through
+  # nsenter. It has one user header, so with grafanaProxyAuth the unit uses
+  # Remote-User and Remote-Role, which Grafana then also takes from there.
+  gitSyncAdminHeaders =
+    if cfg.grafanaProxyAuth.enable
+    then { user = "Remote-User"; role = "Remote-Role"; }
+    else { user = "X-Grafana-Git-Sync-User"; role = "X-Grafana-Git-Sync-Role"; };
 in
 {
   imports = [ ../modules/options.nix ];
@@ -195,7 +206,10 @@ in
   # the container's address, whenever the config or a token changed and at
   # every boot, then have Grafana test it against the Git server. With a
   # seed, an empty repository first gets the seed's dashboards
-  # (docs/adr/0011-git-sync-seeds-an-empty-repository.md). Grafana
+  # (docs/adr/0011-git-sync-seeds-an-empty-repository.md). With
+  # apiTokenFile missing or empty, it first makes Grafana's service account
+  # and writes its token there
+  # (docs/adr/0012-git-sync-service-account-made-by-the-host.md). Grafana
   # keeps the repository in its database, so turning the option off leaves
   # it there until deleted in Administration, Provisioning.
   systemd.services.grafana-git-sync = lib.mkIf gitSync.enable {
@@ -203,7 +217,11 @@ in
     after = [ "podman-grafana.service" "network-online.target" ];
     wants = [ "podman-grafana.service" "network-online.target" ];
     wantedBy = [ "multi-user.target" ];
-    path = [ config.virtualisation.podman.package ];
+    path = [ config.virtualisation.podman.package pkgs.util-linux ];
+    environment = {
+      GRAFANA_GIT_SYNC_USER_HEADER = gitSyncAdminHeaders.user;
+      GRAFANA_GIT_SYNC_ROLE_HEADER = gitSyncAdminHeaders.role;
+    };
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -290,14 +308,7 @@ in
         "${oidc.clientIdFile}:/run/secrets/oidc-client-id:ro"
         "${oidc.clientSecretFile}:/run/secrets/oidc-client-secret:ro"
       ];
-      environment = lib.optionalAttrs gitSync.enable {
-        # Git Sync is on by default from Grafana 13; this allows Pure Git
-        # repositories only, and lets Grafana reach the repository's host,
-        # which it would refuse where the name resolves to a private
-        # address (a tailnet's IPv6 ULA, a LAN).
-        GF_PROVISIONING_REPOSITORY_TYPES = "git";
-        GF_PROVISIONING_ALLOWED_GIT_URLS = gitSyncHost;
-      } // (if oidc.enable then {
+      environment = (if oidc.enable then {
         # Sign in through the OpenID Connect provider, usually tsidp
         # (docs/adr/0006-tsidp-for-oidc-sign-in.md). The redirect URI is
         # built from the root URL. The image's entrypoint reads the
@@ -351,7 +362,26 @@ in
         GF_AUTH_ANONYMOUS_ENABLED = "true";
         GF_AUTH_ANONYMOUS_ORG_ROLE = "Admin";
         GF_AUTH_DISABLE_LOGIN_FORM = "true";
-      });
+      }) // lib.optionalAttrs gitSync.enable {
+        # Git Sync is on by default from Grafana 13; this allows Pure Git
+        # repositories only, and lets Grafana reach the repository's host,
+        # which it would refuse where the name resolves to a private
+        # address (a tailnet's IPv6 ULA, a LAN).
+        GF_PROVISIONING_REPOSITORY_TYPES = "git";
+        GF_PROVISIONING_ALLOWED_GIT_URLS = gitSyncHost;
+        # The grafana-git-sync unit's sign in as the built-in admin, from
+        # 127.0.0.1 in the container only; from anywhere else Grafana
+        # refuses the headers. No password, so the login form and basic
+        # auth stay as they are. Besides Caddy's address with
+        # grafanaProxyAuth, which keeps signing up its users.
+        GF_AUTH_PROXY_ENABLED = "true";
+        GF_AUTH_PROXY_HEADER_NAME = gitSyncAdminHeaders.user;
+        GF_AUTH_PROXY_HEADER_PROPERTY = "username";
+        GF_AUTH_PROXY_HEADERS = "Role:${gitSyncAdminHeaders.role}";
+        GF_AUTH_PROXY_WHITELIST = lib.concatStringsSep ","
+          (lib.optional cfg.grafanaProxyAuth.enable proxyAddress ++ [ "127.0.0.1" ]);
+        GF_AUTH_PROXY_AUTO_SIGN_UP = lib.boolToString cfg.grafanaProxyAuth.enable;
+      };
     };
   };
 }

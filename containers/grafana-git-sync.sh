@@ -9,15 +9,30 @@
 # seeded once: one commit with the seed's dashboards under the spec's path,
 # pushed to its branch (docs/adr/0011-git-sync-seeds-an-empty-repository.md).
 # A repository with history is never touched, and a failed seed fails the
-# unit before anything reaches Grafana. Then the script waits until Grafana answers in <container>, on the container's
-# address on podman's network, then creates the repository with the token
-# from <token file>, or replaces it when its spec in Grafana differs from
-# the config or the spec or token changed since the last run, which
-# <state file> records as a hash. Finally Grafana tests the repository: a
-# token the Git server refuses fails the unit.
+# unit before anything reaches Grafana. Then the script waits until
+# Grafana answers in <container>, on the container's address on podman's
+# network, then creates the repository with the token from <token file>,
+# or replaces it when its spec in Grafana differs from the config or the
+# spec or token changed since the last run, which <state file> records as
+# a hash. Finally Grafana tests the repository: a token the Git server
+# refuses fails the unit.
 #
-# Both tokens stay off command lines: the API token goes to curl as a
-# header file, the Git token inside the request body on stdin, and to git
+# When <API token file> is missing or empty, the script makes the token
+# once Grafana answers
+# (docs/adr/0012-git-sync-service-account-made-by-the-host.md): it signs
+# in to Grafana as its built-in admin through Grafana's proxy
+# authentication, which Grafana takes from 127.0.0.1 only, so from inside
+# the container's network namespace (nsenter, from the host's PATH like
+# podman). It finds or makes the service account grafana-git-sync with the
+# Admin role, adds a token, writes it to the file, mode 0400, and deletes
+# the account's other tokens. A file with a token in it is used as it is.
+# GRAFANA_GIT_SYNC_USER_HEADER and GRAFANA_GIT_SYNC_ROLE_HEADER
+# (X-Grafana-Git-Sync-User and X-Grafana-Git-Sync-Role) name the headers
+# Grafana reads, GRAFANA_GIT_SYNC_ADMIN (admin) the admin's login.
+#
+# Both tokens stay off command lines and out of the logs: the API token
+# goes to curl as a header file and comes from Grafana in a file of a
+# private directory, the Git token inside the request body on stdin, and to git
 # through GRAFANA_GIT_SYNC_ASKPASS, which reads it from <token file>.
 # GRAFANA_GIT_SYNC_TRIES (60) and GRAFANA_GIT_SYNC_WAIT (5 seconds) set how
 # long it waits, GRAFANA_GIT_SYNC_PORT (3000) where Grafana listens.
@@ -45,10 +60,8 @@ if ! token=$(cat "$token_file") || [ -z "$token" ]; then
   echo "The Git token file $token_file is missing or empty; the repository is not set up." >&2
   exit 1
 fi
-if ! api_token=$(cat "$api_token_file") || [ -z "$api_token" ]; then
-  echo "The Grafana API token file $api_token_file is missing or empty; the repository is not set up." >&2
-  exit 1
-fi
+# Made below, once Grafana answers, when missing or empty.
+api_token=$(cat "$api_token_file" 2>/dev/null || true)
 
 name=$(jq -r .metadata.name "$repository")
 # git runs the askpass in other directories.
@@ -153,6 +166,87 @@ until grafana_up 2>/dev/null; do
   sleep "$delay"
 done
 api=$base/apis/provisioning.grafana.app/v0alpha1/namespaces/default/repositories
+
+# Calls Grafana's API as its built-in admin, on 127.0.0.1 inside the
+# container's network namespace, the one address Grafana takes the admin's
+# headers from. Leaves the answer in $work/answer and prints the status
+# code. No proxy: one would make the call from elsewhere.
+as_admin() {
+  timeout 70 nsenter --target "$grafana_pid" --net \
+    curl -sS --noproxy '*' --connect-timeout 10 --max-time 60 -o "$work/answer" -w '%{http_code}' \
+    -H "${GRAFANA_GIT_SYNC_USER_HEADER:-X-Grafana-Git-Sync-User}: ${GRAFANA_GIT_SYNC_ADMIN:-admin}" \
+    -H "${GRAFANA_GIT_SYNC_ROLE_HEADER:-X-Grafana-Git-Sync-Role}: Admin" \
+    -H 'Content-Type: application/json' "$@"
+}
+
+admin_failed() {
+  case "$2" in
+    401 | 403)
+      echo "Grafana refused the host's admin sign in to $1 ($2): $(jq -r '.message // .' "$work/answer" 2>/dev/null || cat "$work/answer"). Grafana takes it from 127.0.0.1 in its container only, once started with grafanaGitSync on. The token file $api_token_file is not written." >&2
+      ;;
+    *)
+      echo "Asking Grafana to $1 answered $2: $(cat "$work/answer" 2>/dev/null). The token file $api_token_file is not written." >&2
+      ;;
+  esac
+  exit 1
+}
+
+# Makes a token of the service account grafana-git-sync, and the account
+# when there is none, and writes it to the API token file. The account's
+# other tokens, from an earlier run or by hand, are deleted once the file
+# holds the new one.
+make_api_token() {
+  local sa=grafana-git-sync accounts id code old tmp t
+  if ! grafana_pid=$(timeout 10 podman inspect -f '{{.State.Pid}}' "$container") \
+    || [ -z "$grafana_pid" ] || [ "$grafana_pid" = 0 ]; then
+    echo "Finding the $container container's process failed; the token file $api_token_file is not written." >&2
+    exit 1
+  fi
+  accounts=http://127.0.0.1:$port/api/serviceaccounts
+
+  code=$(as_admin "$accounts/search?query=$sa") || code=000
+  [ "$code" = 200 ] || admin_failed "find the service account $sa" "$code"
+  id=$(jq -r --arg sa "$sa" 'first(.serviceAccounts[] | select(.name == $sa) | .id) // empty' "$work/answer")
+  if [ -z "$id" ]; then
+    code=$(as_admin -X POST --data-binary "{\"name\":\"$sa\",\"role\":\"Admin\"}" "$accounts") || code=000
+    case "$code" in
+      200 | 201) id=$(jq -r .id "$work/answer") ;;
+      *) admin_failed "make the service account $sa" "$code" ;;
+    esac
+    echo "Made the Grafana service account $sa, with the Admin role."
+  fi
+
+  code=$(as_admin "$accounts/$id/tokens") || code=000
+  [ "$code" = 200 ] || admin_failed "list the tokens of the service account $sa" "$code"
+  old=$(jq -r '.[].id' "$work/answer")
+
+  code=$(as_admin -X POST --data-binary "{\"name\":\"$sa-$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)\"}" "$accounts/$id/tokens") || code=000
+  [ "$code" = 200 ] || admin_failed "add a token to the service account $sa" "$code"
+  if ! tmp=$(mktemp "$api_token_file.XXXXXX"); then
+    echo "Writing the token file $api_token_file failed." >&2
+    exit 1
+  fi
+  if ! jq -j '.key | select(type == "string" and . != "")' "$work/answer" > "$tmp" 2>/dev/null || [ ! -s "$tmp" ]; then
+    rm -f "$tmp"
+    echo "Grafana gave no token for the service account $sa; the token file $api_token_file is not written." >&2
+    exit 1
+  fi
+  rm -f "$work/answer"
+  chmod 0400 "$tmp"
+  mv -f "$tmp" "$api_token_file"
+  echo "Wrote a new token of the service account $sa to $api_token_file."
+
+  for t in $old; do
+    code=$(as_admin -X DELETE "$accounts/$id/tokens/$t") || code=000
+    [ "$code" = 200 ] \
+      || echo "Deleting the old token $t of the service account $sa answered $code; delete it under Administration, Service accounts." >&2
+  done
+  api_token=$(cat "$api_token_file")
+}
+
+if [ -z "$api_token" ]; then
+  make_api_token
+fi
 
 # Calls the API, with a request body on stdin when given --data-binary @-.
 # Leaves the answer in $work/answer and prints the status code.

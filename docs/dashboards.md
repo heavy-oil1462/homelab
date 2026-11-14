@@ -77,7 +77,8 @@ Seed files are exported as for editing in Git, below. Start from
 ## The tokens
 
 Two files under `/var/lib/secrets`, each owned by root, mode 0400, read
-only by the `grafana-git-sync` unit, which hands the first to Grafana.
+only by the `grafana-git-sync` unit, which hands the first to Grafana. You
+make the first; the unit makes the second.
 
 1. **Forgejo.** Best from a Forgejo user of its own that has write access
    to this one repository: the token can push wherever its user can. Sign
@@ -89,10 +90,15 @@ only by the `grafana-git-sync` unit, which hands the first to Grafana.
    cat > /var/lib/secrets/grafana-git-sync-token   # paste, then Ctrl-D
    ```
 
-2. **Grafana.** In Grafana, open Administration, Users and access,
-   Service accounts, and add one named `git-sync` with the role Admin. Add
-   a token to it and put it in
-   `/var/lib/secrets/grafana-git-sync-api-token` the same way.
+2. **Grafana.** Nothing to do. When
+   `/var/lib/secrets/grafana-git-sync-api-token` is missing or empty, the
+   unit makes the service account `grafana-git-sync`, with the role Admin,
+   adds a token to it and writes the token to the file
+   (docs/adr/0012-git-sync-service-account-made-by-the-host.md). It signs
+   in to Grafana as Grafana's built-in admin, which Grafana allows only
+   from inside its own container, so no password and no new sign in for
+   browsers. A token already in the file, such as one you made by hand
+   before, is used as it is, and nothing is made.
 
 Rebuild the host with the option on, then check the unit:
 
@@ -101,16 +107,22 @@ systemctl status grafana-git-sync
 journalctl -u grafana-git-sync -n 20
 ```
 
-It logs `Created the Git Sync repository homelab-dashboards.` and
-`Grafana reaches the repository homelab-dashboards.` The first pull
-follows; Administration, Provisioning shows the repository, its last pull
-and any file it could not read.
+On the first run it logs `Made the Grafana service account
+grafana-git-sync, with the Admin role.` and `Wrote a new token of the
+service account grafana-git-sync to ...`, then `Created the Git Sync
+repository homelab-dashboards.` and `Grafana reaches the repository
+homelab-dashboards.` The first pull follows; Administration, Provisioning
+shows the repository, its last pull and any file it could not read.
 
-To change a token, replace the file and run
-`systemctl restart grafana-git-sync`. The unit also runs at every boot and
-after every rebuild that changes the settings, and leaves Grafana alone
-when nothing changed. A token that Forgejo refuses fails the unit, which
-the "Failed systemd unit" alert reports.
+To change the Forgejo token, replace the file and run
+`systemctl restart grafana-git-sync`. To change Grafana's, empty its file
+and restart the unit: it adds a new token to `grafana-git-sync` and
+deletes the account's other tokens. A service account you made by hand
+under another name stays, with its tokens, until you delete it under
+Administration, Users and access, Service accounts. The unit also runs at
+every boot and after every rebuild that changes the settings, and leaves
+Grafana alone when nothing changed. A token that Forgejo refuses fails the
+unit, which the "Failed systemd unit" alert reports.
 
 ## Editing a dashboard
 

@@ -51,3 +51,5 @@ Status is one of:
   (Accepted)
 - [ADR-0011](0011-git-sync-seeds-an-empty-repository.md): Git Sync seeds an
   empty repository once from the site's dashboards (Accepted)
+- [ADR-0012](0012-git-sync-service-account-made-by-the-host.md): Grafana's
+  Git Sync service account and token are created by the host (Accepted)
