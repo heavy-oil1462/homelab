@@ -12,6 +12,12 @@ and a sandbox for AI coding agents. The repo stays free of site-specific
 values so anyone can consume it, and it doubles as a Claude Code plugin with
 read-only observability skills for the stack it deploys.
 
+This repository is the home of the Homelab domain, which the team works
+across: homelab, homelab-config (the owner's private site configuration),
+vaka (homelab/vaka, a NixOS-native camera system meant to replace
+Frigate), and dev/cue, dev/fyr and dev/podium. Each has its own
+DIRECTION.md where it has one, and that decides work in its repository.
+
 ## Guiding principles
 
 - No site-specific values in the tree: domains, users, keys, IPs and service
@@ -62,7 +68,8 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
    tailnet-only, Frigate secrets under `/var/lib/secrets/`, no container
    breaks when a secret file is missing.
 3. Every stateful service is backed up with a consistent snapshot, and a
-   restore runbook exists.
+   restore runbook exists. Forgejo, cue and fyr come first (owner, board,
+   2026-11-11).
 4. Failures alert: provisioned rules for failed backups and units, disk,
    host down and certificate expiry, with a contact point.
 5. Image digests and `flake.lock` stay current without manual tracking.
@@ -75,6 +82,9 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
 
 ## How to work
 
+- Long-term initiatives and products are planned in fyr. The supervisor
+  proposes new ones there as suggested, for the owner to accept, and links
+  each cue issue to its initiative (owner, board, 2026-11-11).
 - Verify with `nix flake check`. A new module or option must be used by an
   example host so the check evaluates it.
 - A new or changed module updates the README module list, and the example

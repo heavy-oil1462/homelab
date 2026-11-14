@@ -1,17 +1,20 @@
 # Architecture decision records
 
 One file per decision, named `NNNN-title.md` with the next free number.
-It starts with the title as an H1 and a plain status line directly under
-it, then the sections Context, Decision and Consequences:
+Its first three lines are exactly the title as an H1, an empty line and
+a plain status line; the sections Context, Decision and Consequences
+follow:
 
 ```markdown
 # ADR-NNNN: Title
+
 Status: Proposed
 
 ## Context
 ```
 
-The podium runner only passes records in this form on to its workers.
+The podium runner passes only Accepted records in this form on to its
+workers (parseADR in podium's internal/runner/worker.go).
 
 Status is one of:
 

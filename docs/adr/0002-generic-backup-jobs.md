@@ -1,4 +1,5 @@
 # ADR-0002: Backups are declared per host as homelab.backups.jobs
+
 Status: Accepted
 
 ## Context
