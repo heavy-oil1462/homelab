@@ -47,13 +47,16 @@
 # OpenID Connect provider, usually tsidp
 # (docs/adr/0006-tsidp-for-oidc-sign-in.md), and the git site stays as at
 # the top. The forgejo-oidc unit adds the provider as the sign in source
-# "tailscale" and keeps it in step with the config; register the client at
-# the provider with the redirect URI
-# https://git.<domain>/user/oauth2/tailscale/callback and put its id and
-# secret in the two files, owned by root, mode 0400:
+# "tailscale" and keeps it in step with the config. It reads the client's
+# id and secret from two files, owned by root, mode 0400:
 #
 #   /var/lib/secrets/forgejo-oidc-client-id
 #   /var/lib/secrets/forgejo-oidc-client-secret
+#
+# With tsidp on the same host, declare the client in homelab.tsidp.clients
+# with the redirect URI https://git.<domain>/user/oauth2/tailscale/callback
+# and tsidp writes both files (docs/adr/0010-tsidp-clients-declared-in-nix.md).
+# Otherwise register it at the provider and put its id and secret there.
 #
 # A new user's first sign in creates their account, named after the part of
 # their tailnet login before the @. If that name is taken, Forgejo asks them
@@ -230,10 +233,12 @@ in
 
   # Runs on every boot and after a rebuild that changes it, and restarts
   # Forgejo when the source changed or Forgejo started before the provider
-  # answered. Wants rather than requires, as forgejo-admin.
+  # answered. Wants rather than requires, as forgejo-admin. After tsidp,
+  # when it runs on this host: it writes the id and secret files of the
+  # clients declared in homelab.tsidp.clients before it starts.
   systemd.services.forgejo-oidc = lib.mkIf oidc.enable {
     description = "Set up Forgejo's OpenID Connect sign in";
-    after = [ "podman-forgejo.service" "network-online.target" ];
+    after = [ "podman-forgejo.service" "network-online.target" "tsidp.service" ];
     wants = [ "podman-forgejo.service" "network-online.target" ];
     wantedBy = [ "multi-user.target" ];
     path = [ config.virtualisation.podman.package config.systemd.package ];

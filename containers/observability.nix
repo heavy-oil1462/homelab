@@ -169,6 +169,12 @@ in
     "f ${oidc.clientSecretFile} 0400 grafana grafana -"
   ];
 
+  # With tsidp on this host and Grafana's client declared in
+  # homelab.tsidp.clients, tsidp writes the id and secret before it starts
+  # (docs/adr/0010-tsidp-clients-declared-in-nix.md); Grafana reads them
+  # only when it starts.
+  systemd.services.podman-grafana.after = lib.mkIf oidc.enable [ "tsidp.service" ];
+
   # Fetch the dashboards every interval and copy them into place once they
   # check out. A failed run leaves the unit failed, which the failed unit
   # rule alerts on, until a run succeeds; Grafana keeps the last good set.
