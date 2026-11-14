@@ -2,6 +2,10 @@
 
 Status: Accepted
 
+Amended by [ADR-0012](0012-git-sync-service-account-made-by-the-host.md):
+with Git Sync on, Grafana also takes `Remote-User` from 127.0.0.1 in its
+own container, where the `grafana-git-sync` unit signs in as its admin.
+
 ## Context
 
 ADR-0003 has Caddy pass the tailnet login (`alice@github`) as `Remote-User`

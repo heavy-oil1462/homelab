@@ -2,6 +2,10 @@
 
 Status: Accepted
 
+Amended by [ADR-0012](0012-git-sync-service-account-made-by-the-host.md):
+the `grafana-git-sync` unit makes the Grafana service account and its
+token when `apiTokenFile` has none, instead of the owner by hand.
+
 ## Context
 
 [ADR-0008](0008-dashboards-synced-from-git.md) had a timer on the Grafana

@@ -86,9 +86,9 @@
       # The library's dashboards, read-only in the Homelab folder.
       dashboardsDir = ./assets/dashboards;
       # The owner's own dashboards, synced both ways with a Forgejo
-      # repository through Grafana's Git Sync. The tokens are
-      # /var/lib/secrets/grafana-git-sync-token (Forgejo) and
-      # /var/lib/secrets/grafana-git-sync-api-token (Grafana).
+      # repository through Grafana's Git Sync. The Forgejo token is
+      # /var/lib/secrets/grafana-git-sync-token; the unit makes Grafana's
+      # own, /var/lib/secrets/grafana-git-sync-api-token.
       grafanaGitSync = {
         enable = true;
         url = "https://git.example.com/org/dashboards.git";

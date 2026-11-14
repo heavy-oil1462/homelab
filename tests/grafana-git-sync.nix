@@ -5,6 +5,13 @@
 # refused or missing API token, a Grafana that does not answer and one that
 # never finishes answering fail.
 #
+# The API token (docs/adr/0012-git-sync-service-account-made-by-the-host.md):
+# with no file, the script signs in as the admin through a stubbed nsenter
+# and makes the service account and a token once, mode 0400, never in the
+# output; a file with a token is left alone; an empty one gets a new token
+# for the same account and the old one deleted; and a Grafana refusing the
+# admin fails clearly, writing no file.
+#
 # Seeding (docs/adr/0011-git-sync-seeds-an-empty-repository.md) runs
 # against bare repositories behind `git http-backend` with basic auth: an
 # empty repository gets one commit with exactly the seed's dashboards, in
@@ -36,16 +43,25 @@ runCommand "grafana-git-sync-test" { nativeBuildInputs = [ python3 jq git ]; } '
   }
 
   # podman gives the grafana container's address, 127.0.0.1, where the
-  # stand-in listens.
+  # stand-in listens, and its process. nsenter runs the command it is
+  # given in the build's own network.
   cat > bin/podman <<'STUB'
   #!${runtimeShell}
   echo "$*" >> "$STUB/podman.log"
   case "$*" in
+    "inspect -f {{.State.Pid}} grafana") echo 4242 ;;
     "inspect -f "*" grafana") echo "127.0.0.1 " ;;
     *) exit 64 ;;
   esac
   STUB
-  chmod +x bin/podman
+  cat > bin/nsenter <<'STUB'
+  #!${runtimeShell}
+  echo "$*" >> "$STUB/nsenter.log"
+  [ "$1 $2 $3" = "--target 4242 --net" ] || exit 64
+  shift 3
+  exec "$@"
+  STUB
+  chmod +x bin/podman bin/nsenter
 
   echo api-token-1 > api-token # public-check: fake
   echo git-token-1 > token # public-check: fake
@@ -77,6 +93,7 @@ runCommand "grafana-git-sync-test" { nativeBuildInputs = [ python3 jq git ]; } '
     return "$status"
   }
   writes() { grep -c '^\(POST\|PUT\) .*/repositories\(/homelab-dashboards\)\?$' fake/requests || true; }
+  admin_calls() { grep -c '/api/serviceaccounts' fake/requests || true; }
 
   # First run: creates the repository with the Git token, records it and
   # tests it.
@@ -119,6 +136,8 @@ runCommand "grafana-git-sync-test" { nativeBuildInputs = [ python3 jq git ]; } '
   if run; then fail "refused API token: succeeded"; fi
   [ "$(writes)" -eq 0 ] || fail "refused API token: written"
   grep -q "refused the API token" err || fail "refused API token: no clear error: $(cat err)"
+  [ "$(admin_calls)" -eq 0 ] || fail "refused API token: made a token: $(cat fake/requests)"
+  [ "$(cat api-token)" = api-token-2 ] || fail "refused API token: file changed"
   echo api-token-1 > api-token # public-check: fake
 
   # An empty Git token file: fails before calling Grafana.
@@ -147,6 +166,55 @@ runCommand "grafana-git-sync-test" { nativeBuildInputs = [ python3 jq git ]; } '
   rm fake/repository.json
   run || { cat out err; fail "recreate: failed"; }
   grep -q '^POST ' fake/requests || fail "recreate: not created"
+  [ "$(admin_calls)" -eq 0 ] || fail "with a token file: made a token: $(cat fake/requests)"
+
+  # No API token file: the service account and a token are made, once,
+  # through nsenter into the container, and the run goes on with it.
+  rm api-token
+  : > nsenter.log
+  run || { cat out err; fail "no API token: failed"; }
+  [ "$(grep -c '^POST /api/serviceaccounts$' fake/requests)" -eq 1 ] || fail "no API token: account not made once: $(cat fake/requests)"
+  [ "$(grep -c '^POST /api/serviceaccounts/2/tokens$' fake/requests)" -eq 1 ] || fail "no API token: token not made once"
+  jq -e '.[0].name == "grafana-git-sync" and .[0].role == "Admin"' fake/service-accounts.json > /dev/null \
+    || fail "no API token: account $(jq -c '.[0] | del(.tokens)' fake/service-accounts.json)"
+  key=$(jq -r '.[0].tokens[0].key' fake/service-accounts.json)
+  [ "$(cat api-token)" = "$key" ] || fail "no API token: the file does not hold the token Grafana made"
+  [ "$(stat -c %a api-token)" = 400 ] || fail "no API token: mode $(stat -c %a api-token)"
+  [ -z "$(find . -maxdepth 1 -name 'api-token.*')" ] || fail "no API token: left $(find . -maxdepth 1 -name 'api-token.*')"
+  [ "$(grep -c '^--target 4242 --net curl ' nsenter.log)" -eq "$(admin_calls)" ] \
+    || fail "no API token: not every admin call went through nsenter: $(cat nsenter.log)"
+  if grep -q -F "$key" out err nsenter.log podman.log; then fail "no API token: token in the output"; fi
+  grep -q "Made the Grafana service account grafana-git-sync" out || fail "no API token: no log line: $(cat out)"
+  grep -q '/homelab-dashboards/test$' fake/requests || fail "no API token: did not go on"
+
+  # Again: the file is there, so it is used as it is and nothing is made.
+  cp -p api-token api-token.made
+  run || { cat out err; fail "made token again: failed"; }
+  [ "$(admin_calls)" -eq 0 ] || fail "made token again: made a token: $(cat fake/requests)"
+  cmp -s api-token api-token.made && [ ! api-token -nt api-token.made ] && [ ! api-token.made -nt api-token ] \
+    || fail "made token again: the file changed"
+
+  # An empty file: a new token for the same account, the old one deleted.
+  chmod 0600 api-token
+  : > api-token
+  run || { cat out err; fail "empty API token: failed"; }
+  if grep -q '^POST /api/serviceaccounts$' fake/requests; then fail "empty API token: made another account"; fi
+  grep -q '^DELETE /api/serviceaccounts/2/tokens/1$' fake/requests || fail "empty API token: old token kept: $(cat fake/requests)"
+  jq -e --arg key "$(cat api-token)" '.[0].tokens == [.[0].tokens[0]] and .[0].tokens[0].key == $key' \
+    fake/service-accounts.json > /dev/null || fail "empty API token: tokens $(jq -c '.[0].tokens | map(.id)' fake/service-accounts.json)"
+  [ "$(cat api-token)" != "$key" ] || fail "empty API token: the same token"
+
+  # Grafana refuses the admin: fails, saying so, with no file written and
+  # no repository set up.
+  rm -f api-token
+  touch fake/refuse-admin
+  if run; then fail "admin refused: succeeded"; fi
+  grep -q "Grafana refused the host's admin sign in to find the service account grafana-git-sync (403)" err \
+    || fail "admin refused: no clear error: $(cat err)"
+  [ ! -e api-token ] || fail "admin refused: wrote the file"
+  [ "$(writes)" -eq 0 ] || fail "admin refused: went on: $(cat fake/requests)"
+  rm fake/refuse-admin
+  echo api-token-1 > api-token # public-check: fake
 
   # Seeding. A token made here, so that it is in no file of the build's,
   # nor in the builder's environment, where a process scan would find it.

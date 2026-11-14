@@ -436,7 +436,13 @@ in
           description = ''
             Token of a Grafana service account with the Admin role, which
             the grafana-git-sync unit calls Grafana's API with. Owned by
-            root, mode 0400, provisioned out of band.
+            root, mode 0400. When the file is missing or empty, the unit
+            makes the service account grafana-git-sync and writes a new
+            token of it here, deleting the account's older tokens; a token
+            already in the file is used as it is. To make the unit sign in
+            as Grafana's built-in admin, Grafana takes proxy authentication
+            headers from 127.0.0.1 in its container
+            (docs/adr/0012-git-sync-service-account-made-by-the-host.md).
           '';
         };
         seed = lib.mkOption {
