@@ -85,6 +85,12 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
 - Long-term initiatives and products are planned in fyr. The supervisor
   proposes new ones there as suggested, for the owner to accept, and links
   each cue issue to its initiative (owner, board, 2026-11-11).
+- The supervisor creates and initializes new repositories for the domain
+  when the work needs them, through podium's orchestrator (podium ADR-027,
+  issue 01a1d8bb-e037; owner, board, 2026-11-14). They are created
+  private, in an organisation the domain already uses, and added to the
+  cue domain. Deleting, renaming or making a repository public stays with
+  the owner.
 - Verify with `nix flake check`. A new module or option must be used by an
   example host so the check evaluates it.
 - A new or changed module updates the README module list, and the example
@@ -101,3 +107,4 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   Home Assistant).
 - Anything that changes what consumers must provision on their hosts
   (new secret files, renamed options): say so in the pull request.
+- Making a repository public, deleting, renaming or transferring one.
