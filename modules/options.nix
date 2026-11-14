@@ -96,6 +96,18 @@ in
       '';
     };
 
+    allTerminfo = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Install the terminfo of the terminals nixpkgs packages (kitty,
+        alacritty, foot, wezterm, ghostty and others), so ncurses programs
+        such as nano work over SSH from any of them. It is nixpkgs'
+        environment.enableAllTerminfo without termite, whose terminfo does
+        not build at our pin.
+      '';
+    };
+
     timeZone = lib.mkOption {
       type = lib.types.str;
       default = "Etc/UTC";

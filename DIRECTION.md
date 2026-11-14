@@ -158,6 +158,11 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   ("It is safe to assume that I will be able to access my google account
   myself without any help"). A change that adds a service, a backup job
   or a secret keeps the card generator in step.
+- Every host carries the terminfo of common terminals (kitty, alacritty,
+  foot, wezterm, ghostty and others), so SSH from any terminal works with
+  ncurses programs ("can this be fixed once and for all too", owner, board,
+  2026-11-14, after nano on a server refused `xterm-kitty`).
+  `homelab.allTerminfo` turns it off.
 - Verify with `nix flake check`. A new module or option must be used by an
   example host so the check evaluates it.
 - A new or changed module updates the README module list, and the example

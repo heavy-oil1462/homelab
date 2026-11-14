@@ -36,7 +36,8 @@
         # modules below but still setting homelab.* values.
         options = ./modules/options.nix;
 
-        # Base system: auto-upgrade defaults, GC, flakes, user, firewall.
+        # Base system: auto-upgrade defaults, GC, flakes, terminfo of common
+        # terminals, user, firewall.
         common = ./modules/common.nix;
 
         # Individual modules.
@@ -139,6 +140,14 @@
           (builtins.unsafeDiscardStringContext exampleWorkstation.config.system.build.toplevel.drvPath);
         example-vm = pkgs.writeText "example-vm-drv"
           (builtins.unsafeDiscardStringContext exampleVm.config.system.build.toplevel.drvPath);
+        # common brings every host the terminfo of common terminals: the
+        # example server's system packages carry kitty's.
+        terminfo =
+          let terminfo = exampleServer.pkgs.kitty.terminfo;
+          in if builtins.any (p: (p.outPath or null) == terminfo.outPath)
+            exampleServer.config.environment.systemPackages
+          then pkgs.writeText "terminfo" (builtins.unsafeDiscardStringContext terminfo.outPath)
+          else throw "example server lacks kitty's terminfo; is homelab.allTerminfo off?";
         # The forgejo-admin unit's script against a stubbed podman.
         forgejo-admin = pkgs.callPackage ./tests/forgejo-admin.nix { };
         # The forgejo-oidc unit's script against a stubbed podman and systemctl.

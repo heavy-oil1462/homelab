@@ -178,7 +178,9 @@ Services (OCI containers, pinned by digest):
 
 System:
 
-- `common` (auto-upgrade, GC, flakes, user, firewall), `openssh` (keys from
+- `common` (auto-upgrade, GC, flakes, user, firewall, and the terminfo of
+  every common terminal, kitty's included, so ncurses programs work over
+  SSH from any of them; `homelab.allTerminfo` turns that off), `openssh` (keys from
   `homelab.adminKeys`), `acme` (Cloudflare DNS-01), `backups` (restic to any
   rclone remote: Vaultwarden, plus the jobs in `homelab.backups.jobs`, with
   consistent SQLite snapshots, and each job's last successful run as a
