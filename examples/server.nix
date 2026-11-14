@@ -10,6 +10,7 @@
     ../roles/server.nix
     ../modules/acme.nix
     ../modules/backups.nix
+    ../modules/tsidp.nix
     ../containers/reverse-proxy.nix
     ../containers/observability.nix
     ../containers/vaultwarden.nix
@@ -37,7 +38,14 @@
         paths = [ "/var/lib/forgejo" ];
         sqliteDatabases = [ "/var/lib/forgejo/data/gitea.db" ];
       };
+      # tsidp's node and signing keys and its registered clients.
+      jobs.tsidp.paths = [ config.homelab.tsidp.stateDir ];
     };
+
+    # Forgejo and Grafana sign in through tsidp, at
+    # https://idp.<tailnet>.ts.net. The auth key, and each client's id and
+    # secret, are files under /var/lib/secrets at their default paths.
+    tsidp.enable = true;
 
     reverseProxy = {
       caddyfile = ./assets/caddy/Caddyfile;
@@ -56,9 +64,10 @@
         "https://vault.home.example.com"
         "https://status.home.example.com/api/health"
       ];
-      grafanaProxyAuth = {
+      grafanaOidc = {
         enable = true;
-        admins = [ "alice@example" ];
+        issuer = "https://idp.tailnet.invalid";
+        admins = [ "alice@example.com" "alice@github" ];
       };
     };
     homepage = {
@@ -79,9 +88,9 @@
         name = "alice";
         email = "alice@example.com";
       };
-      proxyAuth = {
+      oidc = {
         enable = true;
-        users."alice@example" = "alice";
+        issuer = "https://idp.tailnet.invalid";
       };
     };
   };

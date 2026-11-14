@@ -53,24 +53,25 @@ registry.__DOMAIN__:443 {
 }
 
 # Forgejo's web UI and API. Git over SSH bypasses Caddy: the forgejo module
-# publishes it on the tailnet address, port 2222.
-# forgejo_identity (generated from homelab.forgejo.proxyAuth.users, and
-# including tailnet_identity) signs the tailnet user in. With
-# homelab.forgejo.proxyAuth on, Forgejo listens only on this socket; without
-# it, drop the import and use reverse_proxy forgejo:3000.
+# publishes it on the tailnet address, port 2222. With homelab.forgejo.oidc,
+# or no sign in option, Forgejo serves HTTP on the podman network as here.
+# With homelab.forgejo.proxyAuth instead, Forgejo listens only on a socket:
+# the site imports forgejo_identity (generated from
+# homelab.forgejo.proxyAuth.users, and including tailnet_identity), which
+# signs the tailnet user in, and proxies to
+# unix//run/forgejo-http/http.sock.
 git.__DOMAIN__:443 {
 	import site_tls
-	import forgejo_identity
-	reverse_proxy unix//run/forgejo-http/http.sock
+	reverse_proxy forgejo:3000
 }
 
-# grafana_identity (generated from homelab.observability.grafanaProxyAuth,
-# and including tailnet_identity) signs the listed tailnet users in as
-# admins. Without the option, drop the import: Grafana is then open to
-# anyone who reaches it, as Admin.
+# Grafana signs in through tsidp with homelab.observability.grafanaOidc. With
+# homelab.observability.grafanaProxyAuth instead, the site imports
+# grafana_identity before reverse_proxy (generated from its admins, and
+# including tailnet_identity). With neither, Grafana is open to anyone who
+# reaches it, as Admin.
 status.__DOMAIN__:443 {
 	import site_tls
-	import grafana_identity
 	reverse_proxy grafana:3000
 }
 

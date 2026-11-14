@@ -81,7 +81,15 @@ Services (OCI containers, pinned by digest):
   `homelab.observability.grafanaProxyAuth.enable` is set: then only the
   tailnet logins in `homelab.observability.grafanaProxyAuth.admins` sign in,
   as Admin, through a status site that imports `grafana_identity`, and
-  Grafana trusts `Remote-User` only from Caddy's address.
+  Grafana trusts `Remote-User` only from Caddy's address. With
+  `homelab.observability.grafanaOidc.enable` instead, Grafana signs in
+  through tsidp (the `tsidp` module): the logins in
+  `homelab.observability.grafanaOidc.admins` get Admin, everyone else is
+  refused. Register a client in tsidp with the redirect URI
+  `https://status.<domain>/login/generic_oauth` and put its id and secret in
+  `/var/lib/secrets/grafana-oidc-client-id` and
+  `/var/lib/secrets/grafana-oidc-client-secret`
+  (docs/adr/0006-tsidp-for-oidc-sign-in.md).
 - `vaultwarden`, `homepage`, `homeassistant`.
 - `nextcloud`: Nextcloud All-in-One mastercontainer, pinned by digest. Its
   admin UI (8080) and the Apache container it starts (11000) bind to
@@ -129,6 +137,16 @@ Services (OCI containers, pinned by digest):
   socket `/run/forgejo-http/http.sock`, which the caddy container mounts,
   so the git site proxies to `unix//run/forgejo-http/http.sock` instead of
   `forgejo:3000`. Tokens and git over SSH work as before.
+  With `homelab.forgejo.oidc.enable` instead, the web UI signs in through
+  tsidp (the `tsidp` module), and Forgejo creates an account on a user's
+  first sign in. The `forgejo-oidc` unit adds tsidp as the sign in source
+  `tailscale` and restarts Forgejo when it changes. Register a client in
+  tsidp with the redirect URI
+  `https://git.<domain>/user/oauth2/tailscale/callback` and put its id and
+  secret in `/var/lib/secrets/forgejo-oidc-client-id` and
+  `/var/lib/secrets/forgejo-oidc-client-secret`. A service uses proxy
+  authentication or OIDC, never both
+  (docs/adr/0006-tsidp-for-oidc-sign-in.md).
 - `agent-sandbox`: a rootless podman sandbox for AI coding agents (Claude
   Code, Antigravity) with per-project state, shared gh/Claude auth, pinned
   commit identity, and an optional personal skills repo synced into every
@@ -147,6 +165,24 @@ System:
   disko's NixOS module from your own flake, as `examples/vm.nix` shows),
   `tailscale`, `logging-agent`, `observability-agent`, and the desktop
   modules.
+- `tsidp` (`homelab.tsidp`): tsidp, Tailscale's OpenID Connect provider,
+  with nixpkgs' `services.tsidp`, as its own tailnet node
+  `homelab.tsidp.hostName` (`idp`); the issuer is
+  `https://idp.<tailnet>.ts.net`. Forgejo and Grafana sign in through it.
+  Joins the tailnet with the auth key in `/var/lib/secrets/tsidp.env`
+  (`TS_AUTHKEY=tskey-auth-...`; a one-off tagged key). Its node and signing
+  keys and the registered clients live in `homelab.tsidp.stateDir`
+  (`/var/lib/private/tsidp`); back it up with a job, as
+  `examples/server.nix` does. Clients are registered in its admin UI at the
+  issuer URL, which needs a grant in the tailnet policy:
+
+  ```hujson
+  "grants": [{
+    "src": ["alice@example.com"],
+    "dst": ["tag:idp"],
+    "app": { "tailscale.com/cap/tsidp": [{ "allow_admin_ui": true }] }
+  }]
+  ```
 
 ## Secrets
 
@@ -164,13 +200,18 @@ starting a container or makes it create a directory in the file's place.
 | `ha-prometheus-token` | `observability` | prometheus, 0640 | Prometheus runs; the home-assistant scrape fails with 401 |
 | `registry.htpasswd` | `registry` | registry, 0400 | the registry refuses to start, naming the file |
 | `forgejo-secret-key` | `forgejo` | forgejo, 0400 | Forgejo refuses to start |
+| `grafana-oidc-client-id`, `grafana-oidc-client-secret` | `observability`, with `grafanaOidc` | grafana, 0400 | Grafana runs; no one can sign in |
+| `forgejo-oidc-client-id`, `forgejo-oidc-client-secret` | `forgejo`, with `oidc` | root, 0400 | the `forgejo-oidc` unit fails; Forgejo runs without the sign in source |
+| `tsidp.env` | `tsidp` | root, 0400 | missing, tsidp does not start, even once it has joined the tailnet; empty, a new tsidp prints a sign in link to its journal instead of joining |
 | `cloudflare.env` | `acme` | root | certificate renewal fails |
 | `restic-password`, `rclone.env` | `backups` | root | backups fail |
 | `tailscale-authkey` | `tailscale` | root | not needed once the host is on the tailnet; deleted after use |
 
-The last three are read by NixOS services, not containers, and get no
-tmpfiles rule: missing, their units fail the same way they would with an
-empty file, and the Tailscale key must stay absent once used.
+`cloudflare.env`, the backup secrets, `tailscale-authkey`, `tsidp.env` and
+Forgejo's OIDC files are read by NixOS services, not containers, and get no
+tmpfiles rule: missing, their units fail, as most would with an empty file,
+and the Tailscale key must stay absent once used. Once tsidp has joined,
+its key may be revoked; the file stays, emptied if you like.
 
 ## Static user ids
 
@@ -199,8 +240,12 @@ any domain.
 
 ## Checks
 
-`nix flake check` deep-evaluates the two example hosts down to derivation
+`nix flake check` deep-evaluates the example hosts down to derivation
 paths, which catches option and type errors without building full systems.
+`examples/server-proxy-auth.nix` is the example server with Forgejo and
+Grafana on proxy authentication instead of tsidp, so both are evaluated. The
+checks also run the `forgejo-admin` and `forgejo-oidc` scripts against
+stubs and the Caddy identity snippets in a real Caddy.
 
 ## CI
 

@@ -43,6 +43,24 @@
 # to the Forgejo user in homelab.forgejo.proxyAuth.users. Users are not
 # created on first sign in; create them as the admin.
 #
+# With homelab.forgejo.oidc.enable instead, the web UI signs in through an
+# OpenID Connect provider, usually tsidp
+# (docs/adr/0006-tsidp-for-oidc-sign-in.md), and the git site stays as at
+# the top. The forgejo-oidc unit adds the provider as the sign in source
+# "tailscale" and keeps it in step with the config; register the client at
+# the provider with the redirect URI
+# https://git.<domain>/user/oauth2/tailscale/callback and put its id and
+# secret in the two files, owned by root, mode 0400:
+#
+#   /var/lib/secrets/forgejo-oidc-client-id
+#   /var/lib/secrets/forgejo-oidc-client-secret
+#
+# A new user's first sign in creates their account, named after the part of
+# their tailnet login before the @. If that name is taken, Forgejo asks them
+# to sign in to the existing account with its password to link the two.
+# Turning the option off leaves the source in Forgejo; delete it as the
+# admin.
+#
 # The secret key is a file provisioned out of band, never committed:
 #
 #   openssl rand -hex 32 > /var/lib/secrets/forgejo-secret-key
@@ -63,11 +81,15 @@ let
   gid = config.users.groups.forgejo.gid;
   admin = cfg.admin;
   proxyAuth = cfg.proxyAuth.enable;
+  oidc = cfg.oidc;
+  # The source's name, in the callback URL the provider must allow.
+  oidcSource = "tailscale";
   # The host directory for the HTTP socket with proxy authentication on,
   # mounted at the same path in the forgejo and caddy containers.
   httpSocketDir = "/run/forgejo-http";
   httpSocket = "${httpSocketDir}/http.sock";
   adminScript = pkgs.callPackage ./forgejo-admin.nix { };
+  oidcScript = pkgs.callPackage ./forgejo-oidc.nix { };
 in
 {
   imports = [ ../modules/options.nix ];
@@ -93,6 +115,10 @@ in
     {
       assertion = (admin.name == null) == (admin.email == null);
       message = "containers/forgejo.nix needs both homelab.forgejo.admin.name and homelab.forgejo.admin.email, or neither.";
+    }
+    {
+      assertion = !(proxyAuth && oidc.enable);
+      message = "homelab.forgejo.proxyAuth and homelab.forgejo.oidc are both enabled; Forgejo signs in with one or the other.";
     }
   ];
 
@@ -144,6 +170,7 @@ in
       FORGEJO__server__PROTOCOL = if proxyAuth then "http+unix" else "http";
       FORGEJO__server__HTTP_ADDR = if proxyAuth then httpSocket else "0.0.0.0";
       FORGEJO__service__ENABLE_REVERSE_PROXY_AUTHENTICATION = lib.boolToString proxyAuth;
+      FORGEJO__oauth2_client__ENABLE_AUTO_REGISTRATION = lib.boolToString oidc.enable;
     } // lib.optionalAttrs proxyAuth {
       # The REST API keeps to tokens (ENABLE_REVERSE_PROXY_AUTHENTICATION_API
       # stays off). Caddy passes no identity with a request that carries a
@@ -155,6 +182,14 @@ in
       # 127.0.0.1, and only Caddy reaches the socket.
       FORGEJO__security__REVERSE_PROXY_TRUSTED_PROXIES = "127.0.0.1/32";
       FORGEJO__security__REVERSE_PROXY_LIMIT = "1";
+    } // lib.optionalAttrs oidc.enable {
+      # Registration stays closed for the sign up form; sign in through the
+      # provider creates accounts regardless. tsidp's email claim is the
+      # tailnet login, so new users are named after its local part. An
+      # existing account with that name or email is linked only after its
+      # password is given, since users can add email addresses themselves.
+      FORGEJO__oauth2_client__USERNAME = "email";
+      FORGEJO__oauth2_client__ACCOUNT_LINKING = "login";
     } // cfg.extraEnvironment;
   };
 
@@ -190,6 +225,31 @@ in
         admin.email
         "https://git.${domain}/user/login"
       ] ++ lib.optional proxyAuth httpSocket);
+    };
+  };
+
+  # Runs on every boot and after a rebuild that changes it, and restarts
+  # Forgejo when the source changed or Forgejo started before the provider
+  # answered. Wants rather than requires, as forgejo-admin.
+  systemd.services.forgejo-oidc = lib.mkIf oidc.enable {
+    description = "Set up Forgejo's OpenID Connect sign in";
+    after = [ "podman-forgejo.service" "network-online.target" ];
+    wants = [ "podman-forgejo.service" "network-online.target" ];
+    wantedBy = [ "multi-user.target" ];
+    path = [ config.virtualisation.podman.package config.systemd.package ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      StateDirectory = "forgejo-oidc";
+      StateDirectoryMode = "0700";
+      ExecStart = utils.escapeSystemdExecArgs [
+        "${oidcScript}/bin/forgejo-oidc"
+        oidcSource
+        oidc.issuer
+        oidc.clientIdFile
+        oidc.clientSecretFile
+        "/var/lib/forgejo-oidc/applied"
+      ];
     };
   };
 }

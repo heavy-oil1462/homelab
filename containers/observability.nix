@@ -1,8 +1,21 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   cfg = config.homelab.observability;
   proxyAddress = config.homelab.reverseProxy.address;
+  oidc = cfg.grafanaOidc;
+
+  # The forms of the admins' logins in tsidp's email claim: the login, and
+  # for GitHub and passkey logins the login with tsidp's host name appended
+  # (realishEmail in tsidp's server/server.go, 0.0.12).
+  issuerHost = builtins.head (lib.splitString "/" (lib.removePrefix "https://" oidc.issuer));
+  oidcAdminEmails = lib.concatMap (login:
+    [ login ] ++ lib.optional (lib.hasSuffix "@github" login || lib.hasSuffix "@passkey" login)
+      "${login}.${issuerHost}"
+  ) oidc.admins;
+  # JMESPath over the token's and userinfo's claims. Anyone else gets no
+  # role, which role_attribute_strict turns into a refused sign in.
+  oidcRolePath = "contains([${lib.concatMapStringsSep ", " (e: "'${e}'") oidcAdminEmails}], email) && 'Admin'";
 
   prometheusConfig = pkgs.writeText "prometheus.yml" (
     builtins.readFile cfg.prometheusConfig
@@ -86,6 +99,10 @@ in
       assertion = !cfg.grafanaProxyAuth.enable || proxyAddress != null;
       message = "homelab.observability.grafanaProxyAuth trusts Remote-User from homelab.reverseProxy.address, which is null.";
     }
+    {
+      assertion = !(cfg.grafanaProxyAuth.enable && oidc.enable);
+      message = "homelab.observability.grafanaProxyAuth and homelab.observability.grafanaOidc are both enabled; Grafana signs in with one or the other.";
+    }
   ];
 
   users.users.prometheus = {
@@ -116,6 +133,11 @@ in
   # written.
   systemd.tmpfiles.rules = [
     "f /var/lib/secrets/ha-prometheus-token 0640 prometheus prometheus -"
+  ] ++ lib.optionals oidc.enable [
+    # The same for the OIDC client's id and secret, which Grafana's
+    # container reads: missing, sign in fails and Grafana runs.
+    "f ${oidc.clientIdFile} 0400 grafana grafana -"
+    "f ${oidc.clientSecretFile} 0400 grafana grafana -"
   ];
 
   # The blackbox exporter runs on the host, next to Prometheus, so the sites
@@ -179,8 +201,41 @@ in
         "${grafanaDashboards}:/etc/grafana/provisioning/dashboards/dashboards.yml:ro"
         "${grafanaAlerting}:/etc/grafana/provisioning/alerting/alerting.yaml:ro"
         "${cfg.dashboardsDir}:/etc/grafana/dashboards:ro"
+      ] ++ lib.optionals oidc.enable [
+        "${oidc.clientIdFile}:/run/secrets/oidc-client-id:ro"
+        "${oidc.clientSecretFile}:/run/secrets/oidc-client-secret:ro"
       ];
-      environment = if cfg.grafanaProxyAuth.enable then {
+      environment = if oidc.enable then {
+        # Sign in through the OpenID Connect provider, usually tsidp
+        # (docs/adr/0006-tsidp-for-oidc-sign-in.md). The redirect URI is
+        # built from the root URL. The image's entrypoint reads the
+        # __FILE variables' files into the settings.
+        GF_SERVER_ROOT_URL = "https://status.${config.homelab.domain}/";
+        GF_AUTH_GENERIC_OAUTH_ENABLED = "true";
+        GF_AUTH_GENERIC_OAUTH_NAME = "Tailscale";
+        GF_AUTH_GENERIC_OAUTH_CLIENT_ID__FILE = "/run/secrets/oidc-client-id";
+        GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET__FILE = "/run/secrets/oidc-client-secret";
+        GF_AUTH_GENERIC_OAUTH_SCOPES = "openid email profile";
+        GF_AUTH_GENERIC_OAUTH_AUTH_URL = "${oidc.issuer}/authorize";
+        GF_AUTH_GENERIC_OAUTH_TOKEN_URL = "${oidc.issuer}/token";
+        GF_AUTH_GENERIC_OAUTH_API_URL = "${oidc.issuer}/userinfo";
+        GF_AUTH_GENERIC_OAUTH_USE_PKCE = "true";
+        # Users are the tailnet login (tsidp's email claim), not its local
+        # part, which two logins can share.
+        GF_AUTH_GENERIC_OAUTH_LOGIN_ATTRIBUTE_PATH = "email";
+        GF_AUTH_GENERIC_OAUTH_EMAIL_ATTRIBUTE_PATH = "email";
+        GF_AUTH_GENERIC_OAUTH_NAME_ATTRIBUTE_PATH = "name";
+        # The admins get Admin on every sign in; everyone else is refused.
+        GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH = oidcRolePath;
+        GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_STRICT = "true";
+        GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP = "true";
+        GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN = "true";
+        # As with proxy authentication: no anonymous access, no password
+        # login and no basic auth. Service account tokens keep working.
+        GF_AUTH_ANONYMOUS_ENABLED = "false";
+        GF_AUTH_DISABLE_LOGIN_FORM = "true";
+        GF_AUTH_BASIC_ENABLED = "false";
+      } else if cfg.grafanaProxyAuth.enable then {
         # The tailnet user from Caddy's grafana_identity snippet, trusted only
         # from Caddy's address; Grafana answers 401 to the header from
         # anywhere else. Users are created on first sign in with the role
