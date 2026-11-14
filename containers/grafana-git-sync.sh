@@ -1,10 +1,15 @@
 # Keeps Grafana's Git Sync repository in step with the host's config,
 # through Grafana's API (docs/adr/0009-dashboards-through-grafana-git-sync.md).
 #
-#   grafana-git-sync <container> <repository JSON> <token file> <API token file> <state file>
+#   grafana-git-sync <container> <repository JSON> <token file> <API token file> <state file> [<seed>]
 #
-# <repository JSON> is the Repository resource without its secure part. The
-# script waits until Grafana answers in <container>, on the container's
+# <repository JSON> is the Repository resource without its secure part.
+# With <seed>, a directory of dashboard JSON files, the script first asks
+# the Git server for the repository's refs. A repository without any is
+# seeded once: one commit with the seed's dashboards under the spec's path,
+# pushed to its branch (docs/adr/0011-git-sync-seeds-an-empty-repository.md).
+# A repository with history is never touched, and a failed seed fails the
+# unit before anything reaches Grafana. Then the script waits until Grafana answers in <container>, on the container's
 # address on podman's network, then creates the repository with the token
 # from <token file>, or replaces it when its spec in Grafana differs from
 # the config or the spec or token changed since the last run, which
@@ -12,16 +17,18 @@
 # token the Git server refuses fails the unit.
 #
 # Both tokens stay off command lines: the API token goes to curl as a
-# header file, the Git token inside the request body on stdin.
+# header file, the Git token inside the request body on stdin, and to git
+# through GRAFANA_GIT_SYNC_ASKPASS, which reads it from <token file>.
 # GRAFANA_GIT_SYNC_TRIES (60) and GRAFANA_GIT_SYNC_WAIT (5 seconds) set how
 # long it waits, GRAFANA_GIT_SYNC_PORT (3000) where Grafana listens.
 #
-# Nothing waits without a deadline: podman gets 10 seconds a try, each
-# health check 5, each API call 60, so a run that fails ends after about
-# 23 minutes at the defaults, within the unit's TimeoutStartSec.
+# Nothing waits without a deadline: each git command gets 60 seconds,
+# podman 10 seconds a try, each health check 5, each API call 60, so a run
+# that fails ends after about 25 minutes at the defaults, within the
+# unit's TimeoutStartSec.
 
-if [ "$#" -ne 5 ]; then
-  echo "usage: grafana-git-sync <container> <repository JSON> <token file> <API token file> <state file>" >&2
+if [ "$#" -ne 5 ] && [ "$#" -ne 6 ]; then
+  echo "usage: grafana-git-sync <container> <repository JSON> <token file> <API token file> <state file> [<seed>]" >&2
   exit 2
 fi
 container=$1
@@ -29,6 +36,7 @@ repository=$2
 token_file=$3
 api_token_file=$4
 state=$5
+seed=${6:-}
 tries=${GRAFANA_GIT_SYNC_TRIES:-60}
 delay=${GRAFANA_GIT_SYNC_WAIT:-5}
 port=${GRAFANA_GIT_SYNC_PORT:-3000}
@@ -43,8 +51,87 @@ if ! api_token=$(cat "$api_token_file") || [ -z "$api_token" ]; then
 fi
 
 name=$(jq -r .metadata.name "$repository")
+# git runs the askpass in other directories.
+token_path=$(realpath "$token_file")
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+
+# Git with no configuration but its own, asking GRAFANA_GIT_SYNC_ASKPASS
+# for the user and token, never a terminal or a credential helper, and
+# given 60 seconds.
+git_() {
+  HOME=$work GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 \
+    GIT_ASKPASS=$GRAFANA_GIT_SYNC_ASKPASS GRAFANA_GIT_SYNC_TOKEN_FILE=$token_path \
+    GRAFANA_GIT_SYNC_USER=$(jq -r '.spec.git.tokenUser // "git"' "$repository") \
+    timeout 60 git -c credential.helper= "$@"
+}
+
+# A dashboard as Git Sync keeps it: the dashboard.grafana.app/v1 resource
+# Grafana 13 writes, named after the dashboard's uid. Grafana takes plain
+# dashboard JSON too, but only with panels, schemaVersion and tags, and
+# drops the file without a uid. id and version belong to Grafana's
+# storage, which drops them from the spec on reading. A file already in
+# resource form is kept as it is.
+as_resource() {
+  jq --arg file "$1" '
+    if has("apiVersion") and has("kind") then .
+    elif (.uid | type) == "string" and .uid != "" then
+      { apiVersion: "dashboard.grafana.app/v1", kind: "Dashboard",
+        metadata: { name: .uid }, spec: del(.id, .uid, .version) }
+    else error("\($file) has no uid; Git Sync names a dashboard after it") end' "$1"
+}
+
+# Seeds the repository from $seed when it has no refs at all.
+seed_repository() {
+  local url branch dir refs file
+  url=$(jq -r .spec.git.url "$repository")
+  branch=$(jq -r .spec.git.branch "$repository")
+  dir=$(jq -r '.spec.git.path // ""' "$repository")
+  dir=${dir#./}
+  dir=${dir%/}
+
+  if ! refs=$(git_ ls-remote "$url" 2> "$work/git-err"); then
+    echo "Asking $url for its branches failed, so it was not seeded: $(cat "$work/git-err")" >&2
+    exit 1
+  fi
+  if [ -n "$refs" ]; then
+    if ! grep -q "[[:space:]]refs/heads/$branch\$" <<< "$refs"; then
+      echo "$url has history but no branch $branch; it is not seeded." >&2
+    fi
+    return
+  fi
+
+  mkdir "$work/seed"
+  (cd "$seed" && find . -name '*.json' -type f) | sort > "$work/seed-files"
+  if [ ! -s "$work/seed-files" ]; then
+    echo "The seed $seed holds no dashboard JSON files; $url is not seeded." >&2
+    exit 1
+  fi
+  while IFS= read -r file; do
+    file=${file#./}
+    mkdir -p "$(dirname "$work/seed/${dir:+$dir/}$file")"
+    if ! as_resource "$seed/$file" > "$work/seed/${dir:+$dir/}$file" 2> "$work/jq-err"; then
+      echo "The seed file $file is not a dashboard Git Sync can read, so $url was not seeded: $(cat "$work/jq-err")" >&2
+      exit 1
+    fi
+  done < "$work/seed-files"
+
+  git_ -C "$work/seed" init -q -b "$branch"
+  git_ -C "$work/seed" add -A
+  git_ -C "$work/seed" -c user.name=grafana-git-sync -c user.email=grafana-git-sync@localhost.invalid \
+    commit -q -m "Seed the dashboards from $seed" \
+    -m "The grafana-git-sync unit seeded this empty repository once from homelab.observability.grafanaGitSync.seed."
+  # No force: should the branch appear meanwhile, the push is refused.
+  if ! git_ -C "$work/seed" push -q "$url" "HEAD:refs/heads/$branch" 2> "$work/git-err"; then
+    echo "Pushing the seed to $branch of $url failed, so the repository is not set up in Grafana: $(cat "$work/git-err")" >&2
+    exit 1
+  fi
+  echo "Seeded $url from $seed: $(wc -l < "$work/seed-files") files on $branch."
+}
+
+if [ -n "$seed" ]; then
+  seed_repository
+fi
 
 # Grafana's address on podman's network, and whether it answers there.
 grafana_up() {

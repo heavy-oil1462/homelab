@@ -24,6 +24,7 @@ homelab.observability.grafanaGitSync = {
   # branch = "main"; path = "dashboards"; intervalSeconds = 60;
   # tokenFile = "/var/lib/secrets/grafana-git-sync-token";
   # apiTokenFile = "/var/lib/secrets/grafana-git-sync-api-token";
+  # seed = ./assets/git-sync-seed;
 };
 ```
 
@@ -39,8 +40,39 @@ branch without review:
 - Make a repository for dashboards only, not one of the team's protected
   repositories.
 - Leave its branch unprotected, or allow the token's user to push to it.
-- The `dashboards` directory may start empty. Grafana adds one file per
-  dashboard, and a `_folder.json` in each subfolder it makes.
+- The repository may start empty, or with an empty `dashboards`
+  directory. Grafana adds one file per dashboard, and a `_folder.json` in
+  each subfolder it makes. To start it with dashboards, see the next
+  section.
+
+## Seeding an empty repository
+
+With `seed`, a directory of dashboard JSON files in the host's config,
+the `grafana-git-sync` unit fills a repository that has no commits yet
+before it sets the repository up in Grafana
+(docs/adr/0011-git-sync-seeds-an-empty-repository.md):
+
+- It asks Forgejo for the repository's branches, with the same token
+  Grafana gets. If there is any, it does nothing, then or ever after: the
+  seed never overwrites or adds to a repository with history, and editing
+  the seed directory later changes nothing.
+- Otherwise it makes one commit with every `.json` file of the seed,
+  subdirectories included, under `path`, and pushes it to `branch`. The
+  author is `grafana-git-sync <grafana-git-sync@localhost.invalid>`, and
+  the message names the seed's store path. Grafana then pulls the
+  dashboards on its first sync.
+- Each plain dashboard is written in the form Grafana 13's Git Sync
+  writes itself: a `dashboard.grafana.app/v1` resource named after the
+  dashboard's `uid`, with the dashboard as its `spec` and its `id`, `uid`
+  and `version` taken out. A file without a `uid` fails the unit, since
+  Git Sync could not name the dashboard. Files already in that form are
+  committed as they are.
+- A failed push fails the unit before Grafana is touched; the journal
+  says what Forgejo answered. Fix the cause and restart the unit.
+
+Seed files are exported as for editing in Git, below. Start from
+`examples/assets/git-sync-seed`. Keep the seed's dashboards out of
+`dashboardsDir`.
 
 ## The tokens
 
