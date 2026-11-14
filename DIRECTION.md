@@ -84,7 +84,11 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
 
 - Long-term initiatives and products are planned in fyr. The supervisor
   proposes new ones there as suggested, for the owner to accept, and links
-  each cue issue to its initiative (owner, board, 2026-11-11).
+  each cue issue to its initiative (owner, board, 2026-11-11). Every
+  product (cue, fyr, podium, homelab, vaka) has its capabilities in fyr's
+  homelab workspace, and vaka's longer-term initiatives are planned there;
+  the supervisor keeps them current ("I want the capabilities to be in
+  there", owner, board, 2026-11-14).
 - The supervisor creates and initializes new repositories for the domain
   when the work needs them, through podium's orchestrator (podium ADR-027,
   issue 01a1d8bb-e037; owner, board, 2026-11-14). They are created
