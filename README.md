@@ -107,8 +107,12 @@ Services (OCI containers, pinned by digest):
   `grafana-git-sync` unit sets the repository up in Grafana through its
   API, with a Forgejo token and a Grafana service account token. The
   repository must let Grafana push to the branch, so it is not a protected
-  one. See [docs/dashboards.md](docs/dashboards.md)
-  (docs/adr/0009-dashboards-through-grafana-git-sync.md).
+  one. With `grafanaGitSync.seed`, a directory of dashboards, the unit
+  first commits them to a repository that has no commits yet, once, and
+  leaves any repository with history alone; `examples/assets/git-sync-seed`
+  is a starting point. See [docs/dashboards.md](docs/dashboards.md)
+  (docs/adr/0009-dashboards-through-grafana-git-sync.md,
+  docs/adr/0011-git-sync-seeds-an-empty-repository.md).
 - `vaultwarden`, `homepage`, `homeassistant`.
 - `nextcloud`: Nextcloud All-in-One mastercontainer, pinned by digest. Its
   admin UI (8080) and the Apache container it starts (11000) bind to

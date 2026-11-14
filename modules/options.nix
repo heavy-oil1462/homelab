@@ -427,6 +427,22 @@ in
             root, mode 0400, provisioned out of band.
           '';
         };
+        seed = lib.mkOption {
+          type = lib.types.nullOr lib.types.path;
+          default = null;
+          example = lib.literalExpression "./assets/dashboards";
+          description = ''
+            Directory of dashboard JSON files, searched recursively, that
+            the grafana-git-sync unit commits once to a repository with no
+            commits yet, under path on branch, before setting the
+            repository up in Grafana. Plain dashboards need a uid and are
+            put in the dashboard.grafana.app/v1 form Git Sync writes;
+            files already in that form are kept. A repository with any
+            history is never changed, so later edits to the directory have
+            no effect. Null seeds nothing
+            (docs/adr/0011-git-sync-seeds-an-empty-repository.md).
+          '';
+        };
       };
       probeTargets = lib.mkOption {
         type = lib.types.listOf (lib.types.strMatching "https://.+");

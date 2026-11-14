@@ -92,6 +92,8 @@
       grafanaGitSync = {
         enable = true;
         url = "https://git.example.com/org/dashboards.git";
+        # Committed once to the repository while it has no commits.
+        seed = ./assets/git-sync-seed;
       };
       # Sites behind Caddy, probed for availability and certificate expiry.
       # Each must answer 2xx (Grafana's /api/health does; Loki's / is a 404).

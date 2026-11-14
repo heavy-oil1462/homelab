@@ -193,7 +193,9 @@ in
 
   # Create or update the Git Sync repository in Grafana, through its API on
   # the container's address, whenever the config or a token changed and at
-  # every boot, then have Grafana test it against the Git server. Grafana
+  # every boot, then have Grafana test it against the Git server. With a
+  # seed, an empty repository first gets the seed's dashboards
+  # (docs/adr/0011-git-sync-seeds-an-empty-repository.md). Grafana
   # keeps the repository in its database, so turning the option off leaves
   # it there until deleted in Administration, Provisioning.
   systemd.services.grafana-git-sync = lib.mkIf gitSync.enable {
@@ -210,14 +212,14 @@ in
       TimeoutStartSec = "30min";
       StateDirectory = "grafana-git-sync";
       StateDirectoryMode = "0700";
-      ExecStart = utils.escapeSystemdExecArgs [
+      ExecStart = utils.escapeSystemdExecArgs ([
         "${gitSyncScript}/bin/grafana-git-sync"
         "grafana"
         gitSyncRepository
         gitSync.tokenFile
         gitSync.apiTokenFile
         "/var/lib/grafana-git-sync/applied"
-      ];
+      ] ++ lib.optional (gitSync.seed != null) "${gitSync.seed}");
     };
   };
 

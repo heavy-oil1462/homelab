@@ -49,3 +49,5 @@ Status is one of:
 - [ADR-0010](0010-tsidp-clients-declared-in-nix.md): tsidp's OIDC clients
   are declared in Nix and written into its clients file before it starts
   (Accepted)
+- [ADR-0011](0011-git-sync-seeds-an-empty-repository.md): Git Sync seeds an
+  empty repository once from the site's dashboards (Accepted)
