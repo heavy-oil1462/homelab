@@ -121,6 +121,16 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   podium can use in the future, for now just vaka should use it", owner,
   board, 2026-11-14): vaka now; cue, fyr and podium when the owner says
   so. A change to sign-in is made there first.
+- vaka is deployed containerized for testing, like cue and fyr: podium
+  publishes `vaka:latest` from vaka's flake, and the site runs it under
+  `virtualisation.oci-containers` on the NVR host, reached at
+  `camera2.<domain>` behind Caddy with owner sign-in, next to Frigate at
+  `cameras.<domain>` ("Time to add vaka to homelab so I can start to test
+  it. I think for now make it camera2.domain in caddy … I am thinking
+  containerized but can do both here since its a dedicated NVR host
+  anyway", owner, board, 2026-11-14). Frigate stays until the owner
+  decides how it is retired. vaka's NixOS module remains, and the library
+  module that replaces Frigate comes later.
 - Dashboards are edited in Grafana or in Git and reach the other side
   without a deploy, through Grafana's own two-way Git Sync with a Forgejo
   repository ("start provisioning my grafana dashboards directly from
