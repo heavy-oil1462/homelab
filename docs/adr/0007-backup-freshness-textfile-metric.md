@@ -1,6 +1,6 @@
 # ADR-0007: Backup freshness is a node exporter textfile metric written by each job
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 

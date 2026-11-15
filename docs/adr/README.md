@@ -8,7 +8,7 @@ follow:
 ```markdown
 # ADR-NNNN: Title
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 ```
@@ -23,6 +23,11 @@ Status is one of:
 - Superseded by NNNN: replaced by a later record. An accepted record's
   content is not edited; a change of course is a new record that
   supersedes it.
+
+A record of a decision the issue makes, or that the change implements,
+is written as Accepted and listed so in the index. Proposed is only for
+a decision the issue leaves open for the owner; a record left Proposed
+never reaches the workers.
 
 ## Index
 
@@ -40,7 +45,7 @@ Status is one of:
 - [ADR-0006](0006-tsidp-for-oidc-sign-in.md): Forgejo and Grafana sign in
   through tsidp, the tailnet's OIDC provider (Accepted)
 - [ADR-0007](0007-backup-freshness-textfile-metric.md): Backup freshness is
-  a node exporter textfile metric written by each job (Proposed)
+  a node exporter textfile metric written by each job (Accepted)
 - [ADR-0008](0008-dashboards-synced-from-git.md): Grafana's dashboards are
   synced from a Git repository by a timer on the host (Superseded by
   ADR-0009)
