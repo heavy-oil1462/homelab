@@ -160,6 +160,17 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   close, not the design ("can forgejo and grafana OIDC be configured from
   the nix config instead of manually in the UI?", owner, board,
   2026-11-14; ADR-0010).
+- Every step only the owner can do (provisioning a secret, a token or an
+  OAuth client, a deploy, a setting in a UI) is listed in one cue issue
+  tagged `owner-todo`, today 01a1dfe9-0875 ("please make sure to document
+  my remaining todos in a separate issue. The OICD stuff, Complete grafana
+  git, MQTT security/password and vaka google drive sync setup", owner,
+  board, 2026-11-15). Each step is a checklist item with its exact
+  commands and the doc it comes from. The supervisor adds a step when a
+  merged change brings one, and the issue closes when all are done. A
+  change that adds owner steps lists them exactly in its summary, so they
+  can be copied there. Cue questions stay for decisions; the owner-todo
+  issue is for actions.
 - The site keeps a printable recovery card for total server loss,
   homelab-config's `scripts/recovery-card.py` (issue 01a1dbef-dcd9): the
   commands, URLs and secrets needed to get up again ("make a script for
