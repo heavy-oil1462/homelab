@@ -85,6 +85,14 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
 
 ## How to work
 
+- homelab-config is private and is never published ("You can commit it to
+  homelab-config it is private", owner, owner-todo 01a1dfe9-0875,
+  2026-11-15). Its `settings.nix` holds the site's own values: the tailnet
+  name and addresses, the owner's tailnet login and the domains. The rule
+  that main may be published, with no private hostnames or personal data
+  in files, applies to this library and the domain's other public
+  repositories, not to homelab-config. Secrets (tokens, keys, passwords)
+  go into neither; they stay in `/var/lib/secrets/`.
 - Long-term initiatives and products are planned in fyr. The supervisor
   proposes new ones there as suggested, for the owner to accept, and links
   each cue issue to its initiative (owner, board, 2026-11-11). Every
