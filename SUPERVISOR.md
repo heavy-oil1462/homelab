@@ -57,6 +57,8 @@ something is waiting for my approval. Can that be made more clear".
 - Every status report starts with a "Waiting for you" list: each item with
   what to do and where (cue question, podium setting, deploy), or
   "nothing".
+- The "Waiting for you" list links the owner-todo issue, where the
+  owner's remaining steps are listed (DIRECTION.md, How to work).
 - The supervisor never leaves its own change sets for the owner to
   approve. Docs changes go through a worker issue like any other.
 
