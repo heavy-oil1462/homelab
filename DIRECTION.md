@@ -137,8 +137,12 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   for a few days, and the owner then reviews how it performs ("Lets give
   vaka a chance then. You can disable frigate just comment out. Then I
   will let vaka record for a few days and review how it performs", owner,
-  board, 2026-11-15). Whether Frigate is retired for good is the owner's
-  call after that review. vaka's NixOS module remains, and the library
+  board, 2026-11-15). During the trial vaka is reached at
+  `cameras.<domain>`, where the owner's shortcuts point, and
+  `camera2.<domain>` redirects there ("while I am testing vaka please set
+  its url to cameras.domain since that is what I have shortcuts for etc.",
+  owner, board, 2026-11-15). Whether Frigate is retired for good is the
+  owner's call after that review. vaka's NixOS module remains, and the library
   module that replaces Frigate comes later.
 - Dashboards are edited in Grafana or in Git and reach the other side
   without a deploy, through Grafana's own two-way Git Sync with a Forgejo
