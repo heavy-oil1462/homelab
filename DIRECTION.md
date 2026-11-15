@@ -116,6 +116,12 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   should all have same feel", owner, board, 2026-11-14): vaka from the
   start, so its modules can be reused; cue, fyr and podium when the owner
   says so. A change to the shared look is made there first.
+- The owner's web apps use vaka's layout: a slim vertical side bar on the
+  left, with no top bar ("Just to stay consistent it should have the top
+  menu bar on the left side instead just like vaka", owner, board,
+  2026-11-15, about podium). podium follows now (cue issue
+  01a1de25-caef); cue and fyr follow when the owner says so. The side bar
+  is a candidate for a shared component in dev/design-system.
 - Go services that sign users in through OIDC (tsidp, ADR-0006) use
   dev/oidc ("Start work on a generic oidc client module that fyr, cue and
   podium can use in the future, for now just vaka should use it", owner,
