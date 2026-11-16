@@ -184,6 +184,24 @@ in
       '';
     };
 
+    nvidia.cdiCheck.units = lib.mkOption {
+      type = lib.types.listOf (lib.types.strMatching "[A-Za-z0-9:_.@-]+");
+      default = [ ];
+      example = [ "podman-frigate" ];
+      description = ''
+        systemd services, named without .service, of containers that get
+        the GPU through the NVIDIA container toolkit's CDI spec
+        (/run/cdi/nvidia-container-toolkit.json). Each checks the spec
+        before every start, as its first ExecStartPre: it must mount this
+        system's driver and every path it names must exist, or this
+        system's generator writes it again. Each also starts after, and
+        requires, nvidia-container-toolkit-cdi-generator, so a restart of
+        the generator restarts it. Needs the nvidia module and
+        hardware.nvidia-container-toolkit.enable (docs/nvidia.md,
+        docs/adr/0013-gpu-containers-check-the-cdi-spec.md).
+      '';
+    };
+
     network.role = lib.mkOption {
       type = lib.types.enum [ "server" "workstation" "htpc" "custom" ];
       default = "custom";

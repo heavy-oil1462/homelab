@@ -35,6 +35,9 @@
     # installs. Prometheus scrapes it on port 9835 over the tailnet, through
     # observability.nvidiaGpuTargets below.
     observabilityAgent.nvidiaGpu.enable = true;
+    # Frigate gets the GPU through the container toolkit's CDI spec (podman's
+    # --gpus), so it checks the spec before every start (docs/nvidia.md).
+    nvidia.cdiCheck.units = [ "podman-frigate" ];
     backups = {
       resticRepo = "rclone:remote:homelab-backup";
       # Forgejo's data dir is /var/lib/gitea in the container, and the
@@ -137,6 +140,9 @@
   };
 
   networking.hostName = "example-server";
+
+  # The CDI spec that hands the GPU to containers, for Frigate.
+  hardware.nvidia-container-toolkit.enable = true;
 
   # The NVIDIA driver from the nvidia module is unfree; allow exactly its
   # packages.
