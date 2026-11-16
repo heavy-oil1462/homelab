@@ -126,7 +126,10 @@ Services (OCI containers, pinned by digest):
   `/var/lib/frigate`. Camera credentials (FRIGATE_* variables the config
   expands) come from `/var/lib/secrets/frigate.env`. Hosts that still have
   the old `/etc/secrets/frigate.env` get it copied over on the next start;
-  remove the old file once Frigate works.
+  remove the old file once Frigate works. It gets the GPU through the
+  NVIDIA container toolkit's CDI spec; list `podman-frigate` in
+  `homelab.nvidia.cdiCheck.units`, as `examples/server.nix` does, so it
+  checks the spec before every start (docs/nvidia.md).
 - `unifi`: UniFi Network controller (linuxserver image) with its own
   MongoDB container (auth enabled). Expects MONGO_INITDB_ROOT_USERNAME,
   MONGO_INITDB_ROOT_PASSWORD, MONGO_USER and MONGO_PASS in
@@ -190,7 +193,10 @@ System:
   `locale`, `yubikey` (pam_u2f with a
   host-independent origin), `firewall` (role-based baseline), `nvidia` (proprietary driver;
   the host must allow the unfree `nvidia-x11` and `nvidia-settings`, as
-  `examples/workstation.nix` does), `vm-disko` (single-disk VM layout; needs
+  `examples/workstation.nix` does; with `homelab.nvidia.cdiCheck.units`,
+  the listed GPU containers check the container toolkit's CDI spec before
+  every start and write it again when it mounts another driver, see
+  [docs/nvidia.md](docs/nvidia.md)), `vm-disko` (single-disk VM layout; needs
   disko's NixOS module from your own flake, as `examples/vm.nix` shows),
   `tailscale`, `logging-agent`, `observability-agent` (node exporter with
   the systemd collector, and the textfile collector reading

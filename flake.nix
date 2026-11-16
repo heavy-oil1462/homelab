@@ -155,6 +155,21 @@
         # The script writing tsidp's declared clients, against a fake state
         # directory.
         tsidp-clients = pkgs.callPackage ./tests/tsidp-clients.nix { };
+        # The CDI spec check of GPU containers against stub specs, and its
+        # place in the example server's Frigate unit. The unit's strings are
+        # compared, never run: their string context is discarded, so the
+        # check builds neither the driver nor the generator.
+        nvidia-cdi-check =
+          let
+            cfg = exampleServer.config;
+            text = builtins.unsafeDiscardStringContext;
+          in
+          pkgs.callPackage ./tests/nvidia-cdi-check.nix {
+            firstExecStartPre = text (builtins.head cfg.systemd.services.podman-frigate.serviceConfig.ExecStartPre);
+            requires = cfg.systemd.services.podman-frigate.requires;
+            driver = text "${nixpkgs.lib.getLib cfg.hardware.nvidia.package}";
+            generator = text cfg.systemd.services.nvidia-container-toolkit-cdi-generator.serviceConfig.ExecStart;
+          };
         # The grafana-git-sync unit's script against a stand-in for Grafana.
         grafana-git-sync = pkgs.callPackage ./tests/grafana-git-sync.nix { };
         # The example Caddyfile's tailnet_identity snippet in a real Caddy.

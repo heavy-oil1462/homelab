@@ -58,3 +58,5 @@ never reaches the workers.
   empty repository once from the site's dashboards (Accepted)
 - [ADR-0012](0012-git-sync-service-account-made-by-the-host.md): Grafana's
   Git Sync service account and token are created by the host (Accepted)
+- [ADR-0013](0013-gpu-containers-check-the-cdi-spec.md): GPU containers
+  check the CDI spec before they start (Accepted)
