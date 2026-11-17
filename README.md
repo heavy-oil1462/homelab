@@ -63,6 +63,8 @@ Services (OCI containers, pinned by digest):
   with an `Authorization` header pass without an identity. It turns off
   tailscale's subnet-route SNAT, so don't enable it on a subnet router or
   exit node (docs/adr/0003-tailscale-identity-for-sign-in.md).
+  Caddy runs as the caddy user (606), with NET_BIND_SERVICE only; the
+  certificate's group and the identity socket's are `caddy`.
   The caddy container has the fixed address `homelab.reverseProxy.address`
   (10.88.255.2) on podman's default network. With Forgejo's or Grafana's
   proxy authentication on, it also defines `forgejo_identity` and
@@ -115,7 +117,9 @@ Services (OCI containers, pinned by digest):
   is a starting point. See [docs/dashboards.md](docs/dashboards.md)
   (docs/adr/0009-dashboards-through-grafana-git-sync.md,
   docs/adr/0011-git-sync-seeds-an-empty-repository.md).
-- `vaultwarden`, `homepage`, `homeassistant`.
+- `vaultwarden`, `homepage` (runs as the homepage user, with the files it
+  writes itself in the volumes `homepage-config` and `homepage-cache`),
+  `homeassistant` (runs as root, with host networking).
 - `nextcloud`: Nextcloud All-in-One mastercontainer, pinned by digest. Its
   admin UI (8080) and the Apache container it starts (11000) bind to
   `homelab.nextcloud.bindAddress`, the tailnet address by default. To reach
@@ -262,6 +266,47 @@ tmpfiles rule: missing, their units fail, as most would with an empty file,
 and the Tailscale key must stay absent once used. Once tsidp has joined,
 its key may be revoked; the file stays, emptied if you like.
 
+## Containers run unprivileged
+
+Every container runs with `--security-opt=no-new-privileges` and
+`--cap-drop=ALL`, adding back only the capabilities its module names, each
+with its reason, and runs as a dedicated host user unless its image supports
+nothing but root (docs/adr/0014-containers-run-unprivileged.md):
+
+| Container | Runs as | Capabilities added |
+| --- | --- | --- |
+| `caddy` (`reverse-proxy`) | caddy, 606 | NET_BIND_SERVICE, for 443 |
+| `homepage` | homepage, 607 | none |
+| `prometheus`, `loki`, `grafana` (`observability`) | prometheus 603, loki 604, grafana 605 | none |
+| `vaultwarden` | vaultwarden, 600 | none |
+| `registry` | registry, 601 | none |
+| `forgejo` | forgejo, 602 | none |
+| `unifi-db` (`unifi`) | unifi-db, 988 | none |
+| `unifi` (`unifi`) | root, dropping to unifi (989) for the controller | CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, KILL |
+| `home-assistant` (`homeassistant`) | root | NET_RAW, NET_BIND_SERVICE, CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, KILL |
+| `frigate` (`nvr`) | root | DAC_OVERRIDE, CHOWN, FOWNER, SETUID, SETGID, KILL |
+| `nextcloud-aio-mastercontainer` (`nextcloud`) | root | CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, KILL, NET_BIND_SERVICE |
+
+The root ones are on the allowlist of the `container-hardening` check, with
+their reasons. A new container module runs as a user, or joins the list with
+the reason in its module.
+
+Data follows the user. Named volumes carry `:U`, so podman hands them to the
+container's user on every start, including data written while Caddy,
+homepage and the observability stack ran as root; a deploy needs no step for
+it. Caddy reads the certificate through the acme cert's group, which the
+reverse proxy sets to `caddy` (the acme units re-own the files when the
+rebuild restarts them), and the Tailscale identity socket
+`/run/tailnet-identity/whois.sock` through its group, also `caddy`, mode
+0660. With Forgejo's proxy authentication, Caddy also gets Forgejo's group,
+for its socket directory.
+
+Caddy and the observability containers share files with the host by their
+user's name: the certificate, the identity socket, the secret files under
+`/var/lib/secrets/`. Their units first run `host-user-check`, which refuses
+to start the container when the host's user has other ids than the ones it
+runs as, and says which to set; see below.
+
 ## Static user ids
 
 Containers that run as a dedicated user need its uid at evaluation time, so
@@ -274,6 +319,26 @@ the block 600 to 699, which automatic assignment does not reach in practice:
 - 600: vaultwarden
 - 601: registry
 - 602: forgejo
+- 603: prometheus
+- 604: loki
+- 605: grafana
+- 606: caddy
+- 607: homepage
+
+A host that already has one of these users from before keeps its ids: NixOS
+warns and does not change them. Forgejo, Vaultwarden, the observability
+users, caddy and homepage take their ids with `lib.mkDefault`, so such a
+host sets the ids it has, from `id <user>`:
+
+```nix
+users.users.prometheus.uid = 997;
+users.groups.prometheus.gid = 997;
+```
+
+Hosts that ran the observability module before have prometheus, loki and
+grafana users with automatic ids; until they set them, those containers
+refuse to start with the ids to set in the journal. homepage's user owns
+nothing on the host, so there it only silences the warning.
 
 Older modules predate the block and keep their ids, since changing the uid of
 a deployed user is not applied by NixOS: 990 frigate (nvr), 989 unifi, 988
@@ -293,6 +358,9 @@ any domain.
 paths, which catches option and type errors without building full systems.
 `examples/server-proxy-auth.nix` is the example server with Forgejo and
 Grafana on proxy authentication instead of tsidp, so both are evaluated. The
+`container-hardening` check holds every container of the example servers
+to docs/adr/0014-containers-run-unprivileged.md: a user that is not root,
+or the allowlist; `no-new-privileges`; all capabilities dropped. The
 checks also run the `forgejo-admin` and `forgejo-oidc` scripts against
 stubs, the `tsidp-clients` script against a fake tsidp state directory,
 and the Caddy identity snippets in a real Caddy.

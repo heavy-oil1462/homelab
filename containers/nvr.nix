@@ -43,8 +43,8 @@ in
       # it, and Frigate supports no other setup. It is on the root
       # allowlist in tests/container-hardening.nix
       # (docs/adr/0014-containers-run-unprivileged.md). The data
-      # directories stay the frigate user's (990) for the backups' sake;
-      # root reaches them with DAC_OVERRIDE.
+      # directories stay the frigate user's (990), as preStart below makes
+      # them; root reaches them with DAC_OVERRIDE.
       extraOptions = [
         "--security-opt=no-new-privileges"
         "--cap-drop=ALL"

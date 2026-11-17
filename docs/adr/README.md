@@ -60,3 +60,5 @@ never reaches the workers.
   Git Sync service account and token are created by the host (Accepted)
 - [ADR-0013](0013-gpu-containers-check-the-cdi-spec.md): GPU containers
   check the CDI spec before they start (Accepted)
+- [ADR-0014](0014-containers-run-unprivileged.md): Library containers run
+  unprivileged, with dropped capabilities (Accepted)
