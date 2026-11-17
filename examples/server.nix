@@ -30,6 +30,12 @@
     adminKeys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPlaceholderPlaceholderPlaceholder0000000000A alice@example"
     ];
+    # Root logs in over SSH with certificates signed by this CA, which a
+    # fleet update signs once per run (modules/deploy-ca.nix); Forgejo
+    # trusts it too, below.
+    deployCaKeys = [
+      "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tPlaceholderPlaceholderPlaceholder00000000000 deploy-ca@example"
+    ];
     tailnetIp = "100.64.0.1";
     # GPU load for the GPU dashboard, from the NVIDIA driver the nvidia module
     # installs. Prometheus scrapes it on port 9835 over the tailnet, through
@@ -132,6 +138,9 @@
         name = "alice";
         email = "alice@example.com";
       };
+      # The fleet run's certificate, with the principals root and alice,
+      # also fetches from Forgejo once the Forgejo user alice lists alice as a principal.
+      trustDeployCa = true;
       oidc = {
         enable = true;
         issuer = "https://idp.tailnet.invalid";

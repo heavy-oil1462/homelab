@@ -684,6 +684,23 @@ in
           '';
         };
       };
+      trustDeployCa = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Let Forgejo's built in SSH server accept user certificates signed
+          by homelab.deployCaKeys, so the certificate a fleet run signs for
+          the hosts also fetches and pushes on Forgejo, with one hardware key
+          touch for the whole run. A certificate signs in as the Forgejo
+          user whose account lists one of its principals as an SSH
+          principal, and a user may list only their own user name
+          (SSH_AUTHORIZED_PRINCIPALS_ALLOW = username). The user adds it
+          once under Settings, SSH / GPG keys, Manage SSH principals. Off
+          by default: it widens SSH access to Forgejo, and the hosts' CA
+          alone does not ask for it
+          (docs/adr/0015-forgejo-trusts-the-deploy-ca.md).
+        '';
+      };
       oidc = oidcClientOptions {
         service = "Forgejo";
         redirect = "https://git.<domain>/user/oauth2/tailscale/callback";
