@@ -188,11 +188,32 @@ in
         socketPath = "${identitySocketDir}/whois.sock";
       };
 
-      # The socket stays mode 0660 and owned by nginx-auth's user, and its
-      # group becomes caddy's, so Caddy, which no longer runs as root,
-      # connects to it and nothing else but root does. systemd makes the
-      # directory, mode 0755, when it binds the socket.
-      systemd.sockets.tailscale-nginx-auth.socketConfig.SocketGroup = lib.mkForce "caddy";
+      # The socket stays owned by nginx-auth's user, and its group becomes
+      # caddy's, mode 0660, so Caddy, which no longer runs as root, connects
+      # to it and nothing else but root does. systemd makes the directory
+      # when it binds the socket; 0755 lets the caddy user through it. Both
+      # modes are set here, not left to nixpkgs' and systemd's defaults,
+      # since the identity-socket check holds them to what 606 needs.
+      systemd.sockets.tailscale-nginx-auth.socketConfig = {
+        SocketGroup = lib.mkForce "caddy";
+        SocketMode = lib.mkForce "0660";
+        DirectoryMode = "0755";
+      };
+
+      # systemd sets a socket's owner and mode only when it creates the
+      # socket, and switch-to-configuration does not restart a changed
+      # .socket unit (nixpkgs issue 74899), so a switch that changed the
+      # group left the old socket, which Caddy could not open. It does
+      # restart a changed socket-activated service by stopping it and its
+      # socket and starting the socket again, which makes a new socket. The
+      # trigger makes every change to the socket a change to the service.
+      # Caddy requires the socket, so it stops with it and comes back when
+      # the switch starts multi-user.target again.
+      systemd.services.tailscale-nginx-auth.restartTriggers = [
+        (builtins.toJSON {
+          inherit (config.systemd.sockets.tailscale-nginx-auth) listenStreams socketConfig;
+        })
+      ];
 
       # tailscale marks everything forwarded in from tailscale0 and
       # masquerades it on the way out (its subnet-route SNAT, on by default).

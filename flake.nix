@@ -157,6 +157,14 @@
             example-server-proxy-auth = exampleServerProxyAuth.config;
           };
         };
+        # The caddy container can open nginx-auth's identity socket, and a
+        # switch that changes the socket makes a new one.
+        identity-socket = pkgs.callPackage ./tests/identity-socket.nix {
+          hosts = {
+            example-server = exampleServer.config;
+            example-server-proxy-auth = exampleServerProxyAuth.config;
+          };
+        };
         # The forgejo-admin unit's script against a stubbed podman.
         forgejo-admin = pkgs.callPackage ./tests/forgejo-admin.nix { };
         # The forgejo-oidc unit's script against a stubbed podman and systemctl.
