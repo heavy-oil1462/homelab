@@ -39,7 +39,25 @@ in
     frigate = {
       image = "ghcr.io/blakeblackshear/frigate@sha256:643667fdb054089277d45efdd33849248f628cbb76b6329950ec8cf217fa6107";
       autoStart = true;
+      # Runs as root: the image's s6-overlay init, nginx and go2rtc expect
+      # it, and Frigate supports no other setup. It is on the root
+      # allowlist in tests/container-hardening.nix
+      # (docs/adr/0014-containers-run-unprivileged.md). The data
+      # directories stay the frigate user's (990) for the backups' sake;
+      # root reaches them with DAC_OVERRIDE.
       extraOptions = [
+        "--security-opt=no-new-privileges"
+        "--cap-drop=ALL"
+        # Writing to /media/frigate and /config, mode 0750 and owned by
+        # frigate, and setting owners and modes in them as root.
+        "--cap-add=DAC_OVERRIDE"
+        "--cap-add=CHOWN"
+        "--cap-add=FOWNER"
+        # s6-overlay and nginx switch users for their workers and signal
+        # them on stop.
+        "--cap-add=SETUID"
+        "--cap-add=SETGID"
+        "--cap-add=KILL"
         "--network=host"
         "--shm-size=1000mb"
         "--gpus"

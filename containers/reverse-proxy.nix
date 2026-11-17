@@ -1,4 +1,4 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, utils, ... }:
 
 let
   domain = config.homelab.domain;
@@ -57,6 +57,10 @@ let
   # one when the service restarts, and the container's bind mount would keep
   # pointing at the deleted directory.
   identitySocketDir = "/run/tailnet-identity";
+
+  uid = config.users.users.caddy.uid;
+  gid = config.users.groups.caddy.gid;
+  hostUserCheck = pkgs.callPackage ./host-user-check.nix { };
 in
 {
   imports = [ ../modules/options.nix ];
@@ -87,6 +91,27 @@ in
         }
       ];
 
+      # Caddy runs as this user, not as root in the container
+      # (docs/adr/0014-containers-run-unprivileged.md). Static uid so the
+      # container's user option has a value at eval time; see "Static user
+      # ids" in the README for the allocation. A host that already has a
+      # caddy user keeps its uid (NixOS does not change it), so such a host
+      # overrides these defaults with its existing uid and gid.
+      users.users.caddy = {
+        isSystemUser = true;
+        group = "caddy";
+        uid = lib.mkDefault 606;
+      };
+      users.groups.caddy = {
+        gid = lib.mkDefault 606;
+      };
+
+      # The certificate's directory and files belong to the caddy group, so
+      # Caddy reads them without root. The acme units re-own the files with
+      # the group they are given when they next run, which a rebuild that
+      # changes it does.
+      security.acme.certs.${domain}.group = "caddy";
+
       virtualisation.oci-containers.containers.caddy = {
         image = "docker.io/library/caddy@sha256:25cdc846626b62d05f6b633b9b40c2c9f6ef89b515dc76133cefd920f7dbe562";
         # When homelab.tailnetIp is set, publishing 443 bound to that address
@@ -98,19 +123,36 @@ in
         # tailscaleIdentity turns that off.
         ports = [ (if tailnetIp != null then "${tailnetIp}:443:443" else "443:443") ];
         autoStart = true;
+        user = "${toString uid}:${toString gid}";
+        # /data and /config are the image's XDG_DATA_HOME and
+        # XDG_CONFIG_HOME, where Caddy keeps its state and autosaves its
+        # config. :U hands each volume to the caddy user on every start, so
+        # data written while Caddy ran as root, or restored from a backup,
+        # is its own.
         volumes = [
           "${caddyFile}:/etc/caddy/Caddyfile"
           "${notFoundHtml}:/var/www/404.html:ro"
           "/var/lib/acme/${domain}:/certs:ro"
-          "caddy-volume:/data"
+          "caddy-volume:/data:U"
+          "caddy-config:/config:U"
         ] ++ lib.optional cfg.tailscaleIdentity.enable "${identitySocketDir}:${identitySocketDir}"
         # Forgejo's HTTP socket with proxy authentication on; containers/forgejo.nix
         # creates the directory. Mounting the directory rather than the socket
         # keeps it working when Forgejo restarts and makes a new socket.
         ++ lib.optional forgejoAuth.enable "/run/forgejo-http:/run/forgejo-http";
+        extraOptions = [
+          "--security-opt=no-new-privileges"
+          "--cap-drop=ALL"
+          # Listening on 443 in the container, a privileged port. podman
+          # gives a non-root user the capabilities it adds as ambient ones.
+          "--cap-add=NET_BIND_SERVICE"
+        ]
         # A fixed address on podman's default network, so services can trust
         # headers from Caddy by its address.
-        extraOptions = lib.optional (cfg.address != null) "--ip=${cfg.address}";
+        ++ lib.optional (cfg.address != null) "--ip=${cfg.address}"
+        # Forgejo's socket directory is mode 0750, owned by forgejo; its
+        # group lets Caddy in, and only Caddy mounts it.
+        ++ lib.optional forgejoAuth.enable "--group-add=${toString config.users.groups.forgejo.gid}";
       };
 
       # The tailnet port bind only succeeds once tailscale has assigned the
@@ -128,16 +170,29 @@ in
       };
     }
 
+    {
+      # The certificate and the identity socket are the caddy group's by
+      # name; the container runs as its number.
+      systemd.services.podman-caddy.serviceConfig.ExecStartPre = lib.mkBefore [
+        (utils.escapeSystemdExecArgs [ "${hostUserCheck}/bin/host-user-check" "caddy" (toString uid) (toString gid) ])
+      ];
+    }
+
     (lib.mkIf cfg.tailscaleIdentity.enable {
       # tailscale's nginx-auth answers a request carrying Remote-Addr and
       # Remote-Port with the tailnet user behind that address (204 and
       # Tailscale-User), 403 for a tagged node and 401 for an address that is
-      # not a tailnet peer. Caddy runs as root in the container, so the
-      # socket's 0660 mode does not keep it out.
+      # not a tailnet peer.
       services.tailscaleAuth = {
         enable = true;
         socketPath = "${identitySocketDir}/whois.sock";
       };
+
+      # The socket stays mode 0660 and owned by nginx-auth's user, and its
+      # group becomes caddy's, so Caddy, which no longer runs as root,
+      # connects to it and nothing else but root does. systemd makes the
+      # directory, mode 0755, when it binds the socket.
+      systemd.sockets.tailscale-nginx-auth.socketConfig.SocketGroup = lib.mkForce "caddy";
 
       # tailscale marks everything forwarded in from tailscale0 and
       # masquerades it on the way out (its subnet-route SNAT, on by default).

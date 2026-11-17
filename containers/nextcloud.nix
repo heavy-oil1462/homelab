@@ -45,8 +45,27 @@ in
         "nextcloud_aio_mastercontainer:/mnt/docker-aio-config"
         "/var/run/docker.sock:/var/run/docker.sock:ro"
       ];
+      # Runs as root: the AIO mastercontainer only supports it. Its start
+      # script sets up its volume as root and drops to www-data with sudo
+      # for its own web server. It also holds podman's socket, which is
+      # root on the host whatever its user; the containers it starts are
+      # not under this module. It is on the root allowlist in
+      # tests/container-hardening.nix
+      # (docs/adr/0014-containers-run-unprivileged.md).
       extraOptions = [
         "--sig-proxy=false"
+        "--security-opt=no-new-privileges"
+        "--cap-drop=ALL"
+        # Setting owners and modes on its volume for www-data.
+        "--cap-add=CHOWN"
+        "--cap-add=DAC_OVERRIDE"
+        "--cap-add=FOWNER"
+        # sudo to www-data, Apache dropping to it, and stopping them.
+        "--cap-add=SETUID"
+        "--cap-add=SETGID"
+        "--cap-add=KILL"
+        # Apache's listeners on ports below 1024 in the container.
+        "--cap-add=NET_BIND_SERVICE"
       ];
     };
   };

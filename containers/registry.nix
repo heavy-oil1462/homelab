@@ -56,6 +56,11 @@
     image = "docker.io/library/registry@sha256:38907510915c3f1604c7e83d6ab602ab3020d092f73bdaed8696773693ff768c"; # 3.1.2, :3 as of 2026-11-07
     autoStart = true;
     user = "${toString config.users.users.registry.uid}:${toString config.users.groups.registry.gid}";
+    # docs/adr/0014-containers-run-unprivileged.md
+    extraOptions = [
+      "--security-opt=no-new-privileges"
+      "--cap-drop=ALL"
+    ];
     volumes = [
       "/var/lib/registry:/var/lib/registry"
       "/var/lib/secrets/registry.htpasswd:/auth/htpasswd:ro"

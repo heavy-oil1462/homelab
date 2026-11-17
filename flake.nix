@@ -148,6 +148,15 @@
             exampleServer.config.environment.systemPackages
           then pkgs.writeText "terminfo" (builtins.unsafeDiscardStringContext terminfo.outPath)
           else throw "example server lacks kitty's terminfo; is homelab.allTerminfo off?";
+        # Every container of the example servers runs as a user that is not
+        # root, or is on the test's allowlist, with no-new-privileges and its
+        # capabilities dropped (docs/adr/0014-containers-run-unprivileged.md).
+        container-hardening = pkgs.callPackage ./tests/container-hardening.nix {
+          hosts = {
+            example-server = exampleServer.config;
+            example-server-proxy-auth = exampleServerProxyAuth.config;
+          };
+        };
         # The forgejo-admin unit's script against a stubbed podman.
         forgejo-admin = pkgs.callPackage ./tests/forgejo-admin.nix { };
         # The forgejo-oidc unit's script against a stubbed podman and systemctl.
