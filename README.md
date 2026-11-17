@@ -301,6 +301,28 @@ rebuild restarts them), and the Tailscale identity socket
 0660. With Forgejo's proxy authentication, Caddy also gets Forgejo's group,
 for its socket directory.
 
+systemd sets the identity socket's owner and mode only when it creates the
+socket, and `switch-to-configuration` does not restart a changed `.socket`
+unit. The reverse proxy therefore makes the socket's settings a restart
+trigger of `tailscale-nginx-auth.service`: a switch that changes them stops
+the service and the socket, Caddy with it, and creates the socket anew. The
+`identity-socket` check holds the example servers to this, and to a group,
+socket mode 0660 and directory mode 0755 that let Caddy's user in. On a
+host, the socket should look like this:
+
+```
+$ ls -ld /run/tailnet-identity /run/tailnet-identity/whois.sock
+drwxr-xr-x 2 root                 root  60 ... /run/tailnet-identity
+srw-rw---- 1 tailscale-nginx-auth caddy  0 ... /run/tailnet-identity/whois.sock
+$ sudo -u '#606' -g '#606' socat -u OPEN:/dev/null UNIX-CONNECT:/run/tailnet-identity/whois.sock && echo ok
+ok
+```
+
+`Permission denied` from socat means Caddy gets it too, and every site that
+imports `tailnet_identity` fails with 502;
+`systemctl restart tailscale-nginx-auth.socket` makes the socket again with
+the configured group.
+
 Caddy and the observability containers share files with the host by their
 user's name: the certificate, the identity socket, the secret files under
 `/var/lib/secrets/`. Their units first run `host-user-check`, which refuses
@@ -361,7 +383,9 @@ Grafana on proxy authentication instead of tsidp, so both are evaluated. The
 `container-hardening` check holds every container of the example servers
 to docs/adr/0014-containers-run-unprivileged.md: a user that is not root,
 or the allowlist; `no-new-privileges`; all capabilities dropped. The
-checks also run the `forgejo-admin` and `forgejo-oidc` scripts against
+`identity-socket` check holds Caddy's access to the Tailscale identity
+socket: its group, socket and directory modes, the mount, and the restart
+trigger that makes a switch create it anew. The checks also run the `forgejo-admin` and `forgejo-oidc` scripts against
 stubs, the `tsidp-clients` script against a fake tsidp state directory,
 and the Caddy identity snippets in a real Caddy.
 
