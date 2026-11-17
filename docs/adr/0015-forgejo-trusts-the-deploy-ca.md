@@ -1,6 +1,6 @@
 # ADR-0015: Forgejo's SSH server trusts the deploy CA
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 
@@ -45,6 +45,9 @@ names a file Forgejo writes for OpenSSH, and the built in server does not
 write it (`modules/ssh/init.go`).
 
 ## Decision
+
+The owner agreed, question 01a1eb30-01d0, 2026-11-17 (DIRECTION.md, Ask
+the owner first: SSH access).
 
 - `homelab.forgejo.trustDeployCa`, off by default, sets
   `SSH_TRUSTED_USER_CA_KEYS` to `homelab.deployCaKeys`, joined with commas,

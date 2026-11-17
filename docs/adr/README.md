@@ -63,4 +63,4 @@ never reaches the workers.
 - [ADR-0014](0014-containers-run-unprivileged.md): Library containers run
   unprivileged, with dropped capabilities (Accepted)
 - [ADR-0015](0015-forgejo-trusts-the-deploy-ca.md): Forgejo's SSH server
-  trusts the deploy CA (Proposed)
+  trusts the deploy CA (Accepted)
