@@ -13,6 +13,15 @@
 # homelab.forgejo.sshPort (2222 by default). Clone URLs read
 # ssh://git@git.<domain>:2222/<owner>/<repo>.git.
 #
+# With homelab.forgejo.trustDeployCa, the SSH server also accepts user
+# certificates signed by homelab.deployCaKeys, the CA the hosts trust for
+# root (modules/deploy-ca.nix). A certificate signs in as the Forgejo user
+# whose account lists one of its principals; each user may list only their
+# own user name, once, under Settings, SSH / GPG keys, Manage SSH
+# principals. A fleet run's certificate then carries the principals root and
+# the owner's Forgejo user name, and one touch of the hardware key serves
+# the hosts and Forgejo (docs/adr/0015-forgejo-trusts-the-deploy-ca.md).
+#
 # Data, the SQLite database, repositories and the generated app.ini live in
 # /var/lib/forgejo. Registration is closed. With homelab.forgejo.admin.name
 # and .email set, the forgejo-admin unit creates the first admin once Forgejo
@@ -120,6 +129,16 @@ in
       message = "containers/forgejo.nix needs both homelab.forgejo.admin.name and homelab.forgejo.admin.email, or neither.";
     }
     {
+      assertion = !cfg.trustDeployCa || config.homelab.deployCaKeys != [ ];
+      message = "homelab.forgejo.trustDeployCa is on, but homelab.deployCaKeys is empty; Forgejo would trust no CA.";
+    }
+    {
+      # Forgejo reads SSH_TRUSTED_USER_CA_KEYS as a comma separated list.
+      assertion = !cfg.trustDeployCa
+        || !(builtins.any (lib.hasInfix ",") config.homelab.deployCaKeys);
+      message = "homelab.forgejo.trustDeployCa: a key in homelab.deployCaKeys contains a comma, which Forgejo would split it at; drop it from the key's comment.";
+    }
+    {
       assertion = !(proxyAuth && oidc.enable);
       message = "homelab.forgejo.proxyAuth and homelab.forgejo.oidc are both enabled; Forgejo signs in with one or the other.";
     }
@@ -179,6 +198,15 @@ in
       FORGEJO__server__HTTP_ADDR = if proxyAuth then httpSocket else "0.0.0.0";
       FORGEJO__service__ENABLE_REVERSE_PROXY_AUTHENTICATION = lib.boolToString proxyAuth;
       FORGEJO__oauth2_client__ENABLE_AUTO_REGISTRATION = lib.boolToString oidc.enable;
+      # With trustDeployCa, the built in server accepts certificates signed
+      # by the deploy CA, as the user that lists one of the certificate's
+      # principals as an SSH principal; with username, a user may list only
+      # their own name. Off, no CA is trusted and no principals can be
+      # added, which is also Forgejo's default without CA keys.
+      FORGEJO__server__SSH_TRUSTED_USER_CA_KEYS =
+        if cfg.trustDeployCa then lib.concatStringsSep "," config.homelab.deployCaKeys else "";
+      FORGEJO__server__SSH_AUTHORIZED_PRINCIPALS_ALLOW =
+        if cfg.trustDeployCa then "username" else "off";
     } // lib.optionalAttrs proxyAuth {
       # The REST API keeps to tokens (ENABLE_REVERSE_PROXY_AUTHENTICATION_API
       # stays off). Caddy passes no identity with a request that carries a

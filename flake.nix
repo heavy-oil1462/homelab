@@ -167,6 +167,14 @@
         };
         # The forgejo-admin unit's script against a stubbed podman.
         forgejo-admin = pkgs.callPackage ./tests/forgejo-admin.nix { };
+        # Forgejo's SSH server trusts the deploy CA with
+        # homelab.forgejo.trustDeployCa, and no CA without it.
+        forgejo-deploy-ca = pkgs.callPackage ./tests/forgejo-deploy-ca.nix {
+          on = exampleServer.config;
+          off = (exampleServer.extendModules {
+            modules = [{ homelab.forgejo.trustDeployCa = nixpkgs.lib.mkForce false; }];
+          }).config;
+        };
         # The forgejo-oidc unit's script against a stubbed podman and systemctl.
         forgejo-oidc = pkgs.callPackage ./tests/forgejo-oidc.nix { };
         # The script writing tsidp's declared clients, against a fake state

@@ -180,6 +180,16 @@ Services (OCI containers, pinned by digest):
   `/var/lib/secrets/forgejo-oidc-client-secret`. A service uses proxy
   authentication or OIDC, never both
   (docs/adr/0006-tsidp-for-oidc-sign-in.md).
+  With `homelab.forgejo.trustDeployCa`, the SSH server also accepts user
+  certificates signed by `homelab.deployCaKeys`, so the certificate a fleet
+  run signs for the hosts fetches from Forgejo too
+  (docs/adr/0015-forgejo-trusts-the-deploy-ca.md). A certificate signs in
+  as the Forgejo user whose account lists one of its principals, and a user
+  may list only their own user name: add it once under Settings, SSH / GPG
+  keys, Manage SSH principals. The certificate then carries `root` for the
+  hosts and that user name for Forgejo, and the SSH user stays `git`.
+  Keep no Forgejo user named `root`: once it listed `root` as its
+  principal, every host certificate would sign in as it.
 - `agent-sandbox`: a rootless podman sandbox for AI coding agents (Claude
   Code, Antigravity) with per-project state, shared gh/Claude auth, pinned
   commit identity, and an optional personal skills repo synced into every
@@ -190,7 +200,11 @@ System:
 - `common` (auto-upgrade, GC, flakes, user, firewall, and the terminfo of
   every common terminal, kitty's included, so ncurses programs work over
   SSH from any of them; `homelab.allTerminfo` turns that off), `openssh` (keys from
-  `homelab.adminKeys`), `acme` (Cloudflare DNS-01), `backups` (restic to any
+  `homelab.adminKeys`), `deploy-ca` (with `homelab.deployCaKeys` set, root
+  logs in over SSH only with a certificate signed by one of those CA keys,
+  so a fleet update signs one short-lived certificate, with one hardware key
+  touch, for every host; `homelab.forgejo.trustDeployCa` lets the same
+  certificate reach Forgejo), `acme` (Cloudflare DNS-01), `backups` (restic to any
   rclone remote: Vaultwarden, plus the jobs in `homelab.backups.jobs`, with
   consistent SQLite snapshots, and each job's last successful run as a
   node exporter metric; restoring is in [docs/backups.md](docs/backups.md)),
@@ -385,7 +399,10 @@ to docs/adr/0014-containers-run-unprivileged.md: a user that is not root,
 or the allowlist; `no-new-privileges`; all capabilities dropped. The
 `identity-socket` check holds Caddy's access to the Tailscale identity
 socket: its group, socket and directory modes, the mount, and the restart
-trigger that makes a switch create it anew. The checks also run the `forgejo-admin` and `forgejo-oidc` scripts against
+trigger that makes a switch create it anew. The `forgejo-deploy-ca` check
+holds Forgejo's SSH settings to `homelab.forgejo.trustDeployCa`: with it
+on, the deploy CA keys and principals limited to user names; off, no CA
+and no principals. The checks also run the `forgejo-admin` and `forgejo-oidc` scripts against
 stubs, the `tsidp-clients` script against a fake tsidp state directory,
 and the Caddy identity snippets in a real Caddy.
 
