@@ -83,6 +83,8 @@ in
       # a minute; sdnotify=healthy absorbs that.
       podman.sdnotify = "healthy";
       extraOptions = [
+        "--security-opt=no-new-privileges"
+        "--cap-drop=ALL"
         "--health-cmd"
         "mongosh --quiet --eval 'db.runCommand({ping: 1}).ok'"
         "--health-interval=10s"
@@ -103,12 +105,29 @@ in
     # find it. The web UI on 8443 stays unreachable from the LAN as long as
     # the host firewall does not open it; the reverse proxy reaches it via
     # the podman bridge gateway. No user option here: the linuxserver init
-    # runs as root and drops to PUID/PGID itself.
+    # runs as root and drops to PUID/PGID itself, so the controller runs as
+    # the unifi user. It is on the root allowlist in
+    # tests/container-hardening.nix
+    # (docs/adr/0014-containers-run-unprivileged.md).
     unifi = {
       image = "lscr.io/linuxserver/unifi-network-application@sha256:3b3780b99ab811ebedb4c83604e0f08b6e1ac2a4fb99bfa9893539dae8c650fa"; # 10.4.57, :latest as of 2026-08-06
       autoStart = true;
       dependsOn = [ "unifi-db" ];
-      extraOptions = [ "--network=host" ];
+      extraOptions = [
+        "--network=host"
+        "--security-opt=no-new-privileges"
+        "--cap-drop=ALL"
+        # The init sets the abc user to PUID/PGID and re-owns /config, mode
+        # 0750 and the unifi user's, as root.
+        "--cap-add=CHOWN"
+        "--cap-add=DAC_OVERRIDE"
+        "--cap-add=FOWNER"
+        # s6-overlay drops to that user for the controller and signals it
+        # on stop.
+        "--cap-add=SETUID"
+        "--cap-add=SETGID"
+        "--cap-add=KILL"
+      ];
       volumes = [
         "/var/lib/unifi:/config"
       ];

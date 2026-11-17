@@ -34,6 +34,12 @@ work in its repository.
   and date (`# 1.37.1, :latest as of 2026-08-04`).
 - Services are tailnet-only by default: nothing new listens on LAN
   interfaces unless an option opts in.
+- Containers run unprivileged: as a dedicated host user with a static id,
+  with `no-new-privileges` and all capabilities dropped but those each
+  names. Root stays only where the image supports nothing else, on the
+  commented allowlist of the `container-hardening` check. Rootless podman is
+  not pursued for now (owner, question 01a1ea3d-c147, 2026-11-17;
+  ADR-0014).
 - A module that consumes a config file takes it as a path option and gets a
   commented starting point in `examples/assets/`.
 - Skills are read-only by default, standard library only, and thin: logic

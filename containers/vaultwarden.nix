@@ -31,6 +31,11 @@
     vaultwarden = {
       image = "docker.io/vaultwarden/server@sha256:ebdfe70701c60ac0c28c697e787cea767d7972940b786037b29fe0d507f821e8"; # 1.37.1, :latest as of 2026-08-04
       user = "${toString config.users.users.vaultwarden.uid}:${toString config.users.groups.vaultwarden.gid}";
+      # docs/adr/0014-containers-run-unprivileged.md
+      extraOptions = [
+        "--security-opt=no-new-privileges"
+        "--cap-drop=ALL"
+      ];
       autoStart = true;
       volumes = [
         "/var/lib/vaultwarden:/data"

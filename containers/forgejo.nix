@@ -136,6 +136,11 @@ in
     image = "codeberg.org/forgejo/forgejo@sha256:5ef02fbcf22beef56b8c844952ffad58cfe177b6f98e46e6abb5df90b88dc8d3"; # 17.0.1-rootless, :17-rootless as of 2026-11-09
     autoStart = true;
     user = "${toString uid}:${toString gid}";
+    # docs/adr/0014-containers-run-unprivileged.md
+    extraOptions = [
+      "--security-opt=no-new-privileges"
+      "--cap-drop=ALL"
+    ];
     # Only SSH is published, and only on sshAddress; HTTP stays on the podman
     # network behind Caddy.
     ports = [ "${toString cfg.sshAddress}:${sshPort}:${sshPort}" ];

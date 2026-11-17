@@ -17,6 +17,26 @@ let
   # role, which role_attribute_strict turns into a refused sign in.
   oidcRolePath = "contains([${lib.concatMapStringsSep ", " (e: "'${e}'") oidcAdminEmails}], email) && 'Admin'";
 
+  hostUserCheck = pkgs.callPackage ./host-user-check.nix { };
+  userCheck = name: [
+    (utils.escapeSystemdExecArgs [
+      "${hostUserCheck}/bin/host-user-check"
+      name
+      (toString config.users.users.${name}.uid)
+      (toString config.users.groups.${name}.gid)
+    ])
+  ];
+
+  # Every container here runs as its host user, with no capabilities and no
+  # way to gain any (docs/adr/0014-containers-run-unprivileged.md). Each
+  # data volume has :U, so podman hands it to that user on every start:
+  # data written while the containers ran as root, a volume new from the
+  # image's own owner, and data restored from a backup.
+  hardening = [
+    "--security-opt=no-new-privileges"
+    "--cap-drop=ALL"
+  ];
+
   prometheusConfig = pkgs.writeText "prometheus.yml" (
     builtins.readFile cfg.prometheusConfig
   );
@@ -161,23 +181,44 @@ in
     }
   ];
 
+  # Static uids so the containers' user option has a value at eval time.
+  # See "Static user ids" in the README for the allocation. Without one the
+  # option read ":", and podman ran the containers as root. A host that
+  # already has these users keeps their ids (NixOS does not change them), so
+  # such a host overrides these defaults with its existing uid and gid;
+  # host-user-check below refuses to start a container until it does.
   users.users.prometheus = {
     isSystemUser = true;
     group = "prometheus";
+    uid = lib.mkDefault 603;
   };
-  users.groups.prometheus = { };
-
-  users.users.grafana = {
-    isSystemUser = true;
-    group = "grafana";
+  users.groups.prometheus = {
+    gid = lib.mkDefault 603;
   };
-  users.groups.grafana = { };
 
   users.users.loki = {
     isSystemUser = true;
     group = "loki";
+    uid = lib.mkDefault 604;
   };
-  users.groups.loki = { };
+  users.groups.loki = {
+    gid = lib.mkDefault 604;
+  };
+
+  users.users.grafana = {
+    isSystemUser = true;
+    group = "grafana";
+    uid = lib.mkDefault 605;
+  };
+  users.groups.grafana = {
+    gid = lib.mkDefault 605;
+  };
+
+  # The secret files below, tsidp's client files included, are owned by the
+  # host users by name; the containers run as their numbers.
+  systemd.services.podman-prometheus.serviceConfig.ExecStartPre = lib.mkBefore (userCheck "prometheus");
+  systemd.services.podman-loki.serviceConfig.ExecStartPre = lib.mkBefore (userCheck "loki");
+  systemd.services.podman-grafana.serviceConfig.ExecStartPre = lib.mkBefore (userCheck "grafana");
 
   # Guarantee the HA scrape token exists as a FILE before the Prometheus
   # container starts. The container bind-mounts it read-only; if the host path
@@ -271,9 +312,10 @@ in
       image = "docker.io/prom/prometheus@sha256:69f5241418838263316593f7274a304b095c40bcf22e57272865da91bd60a8ac"; # :latest as of 2026-06-13
       user = "${toString config.users.users.prometheus.uid}:${toString config.users.groups.prometheus.gid}";
       autoStart = true;
+      extraOptions = hardening;
       volumes = [
         "${prometheusConfig}:/etc/prometheus/prometheus.yml:ro"
-        "prometheus-data:/prometheus"
+        "prometheus-data:/prometheus:U"
         # Long-lived Home Assistant token for the home-assistant scrape job.
         # Runtime secret, never committed; provision it out of band and make
         # it readable by the prometheus container uid.
@@ -287,9 +329,10 @@ in
       image = "docker.io/grafana/loki@sha256:191d4fdfb7264f16989f0a57f320872620a5a7c2ceeec6229212c4190ec49b86"; # :latest as of 2026-06-13
       user = "${toString config.users.users.loki.uid}:${toString config.users.groups.loki.gid}";
       autoStart = true;
+      extraOptions = hardening;
       volumes = [
         "${lokiConfig}:/etc/loki/local-config.yaml:ro"
-        "loki-data:/var/lib/loki"
+        "loki-data:/var/lib/loki:U"
       ];
     };
 
@@ -297,8 +340,9 @@ in
       image = "docker.io/grafana/grafana@sha256:0615ec4fbd4072004b7d86b46ded63013a74b7d6eb1119273dd89e8fa25c13cf"; # 13.3.1, :latest as of 2026-11-14
       user = "${toString config.users.users.grafana.uid}:${toString config.users.groups.grafana.gid}";
       autoStart = true;
+      extraOptions = hardening;
       volumes = [
-        "grafana-data:/var/lib/grafana"
+        "grafana-data:/var/lib/grafana:U"
         "${grafanaDatasources}:/etc/grafana/provisioning/datasources/datasources.yml:ro"
         "${grafanaAlerting}:/etc/grafana/provisioning/alerting/alerting.yaml:ro"
       ] ++ lib.optionals (cfg.dashboardsDir != null) [
