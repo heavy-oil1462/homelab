@@ -152,7 +152,7 @@ in
   ] ++ lib.optional proxyAuth "d ${httpSocketDir} 0750 forgejo forgejo -";
 
   virtualisation.oci-containers.containers.forgejo = {
-    image = "codeberg.org/forgejo/forgejo@sha256:5ef02fbcf22beef56b8c844952ffad58cfe177b6f98e46e6abb5df90b88dc8d3"; # 17.0.1-rootless, :17-rootless as of 2026-11-09
+    image = "codeberg.org/forgejo/forgejo@sha256:39362ab93a94c0c9b8b330d2a877ddbb3f02fa8c0cba1b8d686d437b39f36a04"; # 17.0.2-rootless, :17-rootless as of 2026-11-18
     autoStart = true;
     user = "${toString uid}:${toString gid}";
     # docs/adr/0014-containers-run-unprivileged.md
