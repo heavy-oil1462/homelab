@@ -73,7 +73,7 @@ in
     # does not support skipping major versions on upgrade and UniFi caps the
     # supported server version; bump majors deliberately.
     unifi-db = {
-      image = "docker.io/library/mongo@sha256:98605bfa1bb2a15dd82109e1d78ad31527a9a744909fab4606076fa71a0ae515"; # 8.0.28, :8.0 as of 2026-08-06
+      image = "docker.io/library/mongo@sha256:bdc216e9d5a6ec2cfdac789b5832fdab64cd32055f59885cae918a92de63c361"; # 8.0.38, :8.0 as of 2026-11-18
       autoStart = true;
       user = "${toString config.users.users.unifi-db.uid}:${toString config.users.groups.unifi-db.gid}";
       ports = [ "127.0.0.1:27017:27017" ];
@@ -110,7 +110,7 @@ in
     # tests/container-hardening.nix
     # (docs/adr/0014-containers-run-unprivileged.md).
     unifi = {
-      image = "lscr.io/linuxserver/unifi-network-application@sha256:3b3780b99ab811ebedb4c83604e0f08b6e1ac2a4fb99bfa9893539dae8c650fa"; # 10.4.57, :latest as of 2026-08-06
+      image = "lscr.io/linuxserver/unifi-network-application@sha256:053a608b25f578bb92b7b4f59e3835f6cc6dd0c7500c30b24ac0e27e1742ab20"; # 10.6.109, :latest as of 2026-11-18
       autoStart = true;
       dependsOn = [ "unifi-db" ];
       extraOptions = [

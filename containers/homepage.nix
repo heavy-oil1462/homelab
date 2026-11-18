@@ -27,7 +27,7 @@ in
 
   virtualisation.oci-containers.containers = {
     homepage = {
-      image = "ghcr.io/gethomepage/homepage@sha256:a0b71c8e757298d02560186bab9fbe3fc2d375c523a62cc1019177b37e48aa28"; # :latest as of 2026-07-03
+      image = "ghcr.io/gethomepage/homepage@sha256:019d8f063a7299e7c1c51ee4a70b692291809af3244894fbec2c2ac7d1f71b18"; # 2.8.0, :latest as of 2026-11-18
       autoStart = true;
       user = "${toString uid}:${toString gid}";
       environment = {

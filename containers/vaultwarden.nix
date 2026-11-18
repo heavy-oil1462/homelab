@@ -29,7 +29,7 @@
 
   virtualisation.oci-containers.containers = {
     vaultwarden = {
-      image = "docker.io/vaultwarden/server@sha256:ebdfe70701c60ac0c28c697e787cea767d7972940b786037b29fe0d507f821e8"; # 1.37.1, :latest as of 2026-08-04
+      image = "docker.io/vaultwarden/server@sha256:4fe17f415f90087377d37c755e0ea3cf189dcc6794e49cdd2a9adbb4937d9e1f"; # 1.37.5, :latest as of 2026-11-18
       user = "${toString config.users.users.vaultwarden.uid}:${toString config.users.groups.vaultwarden.gid}";
       # docs/adr/0014-containers-run-unprivileged.md
       extraOptions = [
