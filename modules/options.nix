@@ -168,7 +168,7 @@ in
         Directory of the node exporter's textfile collector: it exports the
         metrics in every *.prom file there. The observability-agent module
         creates it; the backups module writes each job's last successful
-        run into it.
+        run into it, and the vulnerability-scan module its counts.
       '';
     };
 

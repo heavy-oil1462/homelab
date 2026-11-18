@@ -66,3 +66,5 @@ never reaches the workers.
   trusts the deploy CA (Accepted)
 - [ADR-0016](0016-image-updates-as-reviewed-bumps.md): Container image
   updates are found by a tool and land as reviewed bumps (Accepted)
+- [ADR-0017](0017-running-images-are-scanned.md): Running images are
+  scanned for known vulnerabilities (Accepted)
