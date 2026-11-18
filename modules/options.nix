@@ -876,6 +876,19 @@ in
           directory is mounted into the caddy container.
         '';
       };
+      setupLogins = lib.mkOption {
+        type = lib.types.listOf tailnetLogin;
+        default = [ ];
+        example = [ "alice@github" ];
+        description = ''
+          The tailnet logins that may open Pocket ID's first-admin setup
+          (/setup, /signup/setup and /api/signup/setup), which makes
+          whoever finishes it first the admin. The reverse proxy generates
+          the snippet pocket_id_setup from it, which Pocket ID's site in
+          the Caddyfile must import: everyone else, tokens included, gets
+          403 there. Needs homelab.reverseProxy.tailscaleIdentity.enable.
+        '';
+      };
       dataDir = lib.mkOption {
         type = lib.types.str;
         default = "/var/lib/pocket-id";

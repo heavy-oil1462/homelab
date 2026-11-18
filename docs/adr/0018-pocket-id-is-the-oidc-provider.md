@@ -112,6 +112,19 @@ Three ways were considered.
   consistently with `.backup` (ADR-0002), as cue and fyr are. The
   encryption key is not in that backup; it is kept off the host with the
   backup password.
+- **The first-admin setup is guarded at the proxy.** Pocket ID makes
+  whoever finishes its setup first the admin, and the tailnet holds more
+  than the owner: agent hosts, and podium's workers browsing out through
+  it. The reverse proxy generates the snippet `pocket_id_setup` from
+  `homelab.pocketId.setupLogins`, which Pocket ID's site imports. For the
+  setup's pages and API call, as Pocket ID 2.7.0 has them (`/setup`,
+  `/signup/setup` and `/api/signup/setup`, each with what follows a
+  slash), it looks the client up through WhoIs (`tailnet_identity`,
+  ADR-0003) and answers 403 unless the login is listed. A request with a
+  token gets no identity, so it is refused too. A host with Pocket ID
+  does not build unless the Caddyfile imports the snippet, the list is
+  not empty and the WhoIs lookup is on. The guard stays after the admin
+  exists, when Pocket ID refuses the setup itself anyway.
 - **The owner's account** is made once on Pocket ID's setup page, with
   the YubiKey as its passkey (`docs/pocket-id.md`). Apps match it by the
   `preferred_username` or `email` claim, each as its own move settles.
@@ -129,9 +142,13 @@ DIRECTION.md asks to close.
   its database means the owner's account and passkeys are made again and
   every client gets a new secret; losing the encryption key makes a
   restored database unreadable.
-- Until the owner's account exists, anyone on the tailnet who opens the
-  setup page first becomes the admin. The first deploy is followed by the
-  setup right away.
+- Only the owner's tailnet logins reach the setup, so its race is no
+  owner risk. The guard rests on WhoIs, which this record retires: the
+  change that removes the last WhoIs site keeps the setup closed another
+  way, such as through the login gate, or drops the guard on hosts whose
+  admin exists. A setup path a later Pocket ID adds is unguarded until
+  the snippet lists it; the `identity-mapping` check pins the paths of
+  2.7.0.
 - Pocket ID makes the secrets, so the secret file is not the source of
   truth as with tsidp: a secret written by hand is refused and replaced on
   the next run. To rotate one, empty the file and restart

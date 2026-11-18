@@ -9,18 +9,34 @@ passkeys only; there are no passwords.
 ## Deploying it
 
 1. Import `modules/pocket-id.nix` on the host that runs the reverse proxy
-   and set `homelab.pocketId.enable = true`.
+   and set `homelab.pocketId.enable = true`, with the owner's tailnet
+   login in `homelab.pocketId.setupLogins` and
+   `homelab.reverseProxy.tailscaleIdentity.enable` on:
+
+   ```nix
+   homelab.pocketId = {
+     enable = true;
+     setupLogins = [ "alice@github" ];
+   };
+   ```
+
 2. Add its site to the Caddyfile, as the example does:
 
    ```
    id.__DOMAIN__:443 {
    	import site_tls
+   	import pocket_id_setup
    	reverse_proxy unix//run/pocket-id-http/pocket-id.sock
    }
    ```
 
-   The name must resolve on the tailnet like the other sites. Passkeys
-   are bound to it, so pick it once.
+   `pocket_id_setup` is generated from `setupLogins`. It keeps Pocket ID's
+   first-admin setup, the pages `/setup` and `/signup/setup` and the call
+   `/api/signup/setup` that makes the admin, to those tailnet logins,
+   looked up through WhoIs; anyone else, and any request with a token,
+   gets 403 there. The host does not build without the import. The name
+   must resolve on the tailnet like the other sites. Passkeys are bound to
+   it, so pick it once.
 3. Back up its state with a job that copies the database through SQLite:
 
    ```nix
@@ -38,9 +54,11 @@ passkeys only; there are no passwords.
 
 ## The owner's account and passkey
 
-Pocket ID has no users at first, and its setup page makes whoever opens it
-first the admin. Do this right after the first deploy; until then anyone
-on the tailnet who reaches the site could take the admin account.
+Pocket ID has no users at first, and its setup page makes whoever finishes
+it first the admin. Only the logins in `homelab.pocketId.setupLogins`
+reach it, so the owner can do this whenever convenient; other users,
+agents and tagged nodes on the tailnet get 403. Once the admin exists,
+Pocket ID refuses the setup itself.
 
 1. Open `https://id.<domain>/setup`.
 2. Enter first and last name, a username and an email. These become the

@@ -30,6 +30,8 @@ in
   ];
 
   homelab = {
+    # Two logins, so the identity-mapping check sees each let through.
+    pocketId.setupLogins = lib.mkForce [ "alice@example" "carol@example" ];
     reverseProxy.caddyfile = lib.mkForce (builtins.toFile "Caddyfile" caddyfile);
     observability = {
       grafanaOidc.enable = lib.mkForce false;

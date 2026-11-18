@@ -108,7 +108,11 @@
     #     units = [ "podman-grafana.service" ];
     #   };
     # and pocket-id-clients writes the client's id and secret files.
-    pocketId.enable = true;
+    # Only alice's tailnet login reaches its first-admin setup.
+    pocketId = {
+      enable = true;
+      setupLogins = [ "alice@github" ];
+    };
 
     reverseProxy = {
       caddyfile = ./assets/caddy/Caddyfile;

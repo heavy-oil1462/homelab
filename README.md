@@ -303,7 +303,10 @@ System:
   [docs/pocket-id.md](docs/pocket-id.md). It serves only on the socket
   `/run/pocket-id-http/pocket-id.sock`, which the caddy container mounts,
   so it needs the reverse proxy on the same host and a site in the
-  Caddyfile, as the example's `id` site. It runs as the `pocket-id` system
+  Caddyfile, as the example's `id` site. That site imports
+  `pocket_id_setup`, generated from `homelab.pocketId.setupLogins`, which
+  lets only those tailnet logins reach Pocket ID's first-admin setup and
+  needs `homelab.reverseProxy.tailscaleIdentity.enable`. It runs as the `pocket-id` system
   user without capabilities. Its encryption key and admin API key are made
   on the first start in `/var/lib/secrets`. Its SQLite database and
   uploads are in `homelab.pocketId.dataDir` (`/var/lib/pocket-id`); back
@@ -512,7 +515,9 @@ The `logging-labels` check holds the example server's fluent-bit config to
 the [log labels](#logs) and runs it against a stand-in for Loki: a
 container's line labelled with unit and container, a host service's with
 its unit, a kernel line with neither, and every body the record unchanged.
-The `pocket-id-module` check holds the example server's Pocket ID, with two
+The `identity-mapping` check also runs the example's Pocket ID site with
+its `pocket_id_setup` snippet in Caddy: the setup's pages and API call
+reach Pocket ID only for the listed logins. The `pocket-id-module` check holds the example server's Pocket ID, with two
 clients added, to docs/adr/0018-pocket-id-is-the-oidc-provider.md: the
 socket and its directory, the mount in Caddy, the keys before Pocket ID,
 the clients' units after `pocket-id-clients`, the spec it gets and the
