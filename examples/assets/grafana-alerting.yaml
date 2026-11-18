@@ -175,6 +175,89 @@ groups:
             systemctl start restic-backups-{{ $labels.backup_job }};
             journalctl -u restic-backups-{{ $labels.backup_job }}
 
+      # A container whose image has a known CRITICAL or HIGH vulnerability
+      # with a fixed version out: a bump of its image is worth doing soon.
+      # modules/vulnerability-scan.nix scans the images daily and writes
+      # homelab_image_vulnerabilities{image, container, severity, fixable}
+      # through the node exporter's textfile collector
+      # (docs/adr/0017-running-images-are-scanned.md). The two severities
+      # are summed, so a container alerts once; the series' own severity
+      # label would otherwise clash with the rule's. Held for a day, so a
+      # fix that is already being rolled out does not alert. The CVEs are
+      # in the host's report: /var/lib/vulnerability-scan/<container>.json.
+      - uid: homelab-image-vulnerable
+        title: Fixable vulnerability in a running image
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                sum without (severity) (
+                  homelab_image_vulnerabilities{fixable="true", severity=~"CRITICAL|HIGH"}
+                )
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 24h
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.container }} on {{ $labels.instance }} runs {{ $values.A.Value }} fixable critical or high vulnerabilities"
+          description: >-
+            Its image is {{ $labels.image }}. List them on the host with:
+            jq '.Results[].Vulnerabilities[]? | select((.FixedVersion // "") != "")
+            | select(.Severity == "CRITICAL" or .Severity == "HIGH")'
+            /var/lib/vulnerability-scan/{{ $labels.container }}.json
+
+      # A container whose image has not been scanned successfully in 3
+      # days: the scan fails for it (the image is not in podman's storage,
+      # or Trivy has no database yet), or the vulnerability-scan timer no
+      # longer runs. Until a container's first success its timestamp is
+      # when scanning it was first tried, so one that never scans alerts
+      # too. Containers the host no longer runs drop out of the metrics.
+      - uid: homelab-image-scan-stale
+        title: Vulnerability scan failing or stale
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                time() - homelab_image_scan_timestamp_seconds
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [259200] } # 3 days in seconds
+        noDataState: OK
+        execErrState: Error
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "The image of {{ $labels.container }} on {{ $labels.instance }} has not been scanned in {{ humanizeDuration $values.A.Value }}"
+          description: >-
+            Check the timer and the last run with:
+            systemctl list-timers vulnerability-scan and
+            journalctl -u vulnerability-scan
+
       # Filesystem more than 90% full. tmpfs, overlay (container layers) and
       # squashfs are left out. Frigate's /surveillance volume runs full by
       # design (containers/nvr.nix: Frigate deletes old recordings as it

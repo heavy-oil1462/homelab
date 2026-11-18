@@ -168,7 +168,7 @@ in
         Directory of the node exporter's textfile collector: it exports the
         metrics in every *.prom file there. The observability-agent module
         creates it; the backups module writes each job's last successful
-        run into it.
+        run into it, and the vulnerability-scan module its counts.
       '';
     };
 
@@ -278,6 +278,35 @@ in
           };
         };
       });
+    };
+
+    vulnerabilityScan = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Scan the image of every container in
+          virtualisation.oci-containers.containers for known vulnerabilities
+          with Trivy, from the host's podman storage, without pulling
+          (docs/adr/0017-running-images-are-scanned.md). The counts per
+          severity go to the node exporter's textfile collector, and each
+          container's full report to
+          /var/lib/vulnerability-scan/<container>.json. Trivy downloads its
+          vulnerability database from mirror.gcr.io (ghcr.io as fallback)
+          over HTTPS on each run. Needs the observability-agent module.
+        '';
+      };
+      schedule = lib.mkOption {
+        type = lib.types.str;
+        default = "daily";
+        example = "*-*-* 04:00:00";
+        description = ''
+          When the scan runs, as a systemd OnCalendar value, delayed by up
+          to an hour at random. A missed run is caught up after boot
+          (Persistent). The alerts in examples/assets/grafana-alerting.yaml
+          expect a run at least daily.
+        '';
+      };
     };
 
     yubikey.u2fKeysFile = lib.mkOption {

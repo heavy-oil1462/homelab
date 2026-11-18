@@ -77,7 +77,9 @@ Services (OCI containers, pinned by digest):
   site names to Caddy's tailnet address (with Tailscale DNS, a split-DNS
   record for the domain). `examples/assets/grafana-alerting.yaml` alerts on
   failed units, failed backups, backups with no success in 36 hours or
-  none at all, full disks, hosts that are down,
+  none at all, containers with a fixable critical or high vulnerability
+  for a day and images not scanned in 3 days (the `vulnerability-scan`
+  module), full disks, hosts that are down,
   certificates that expire within 14 days and sites that are down or serve
   an invalid certificate, through one placeholder contact point. The
   example dashboard `gpu.json` shows GPU load per instance from the NVIDIA
@@ -223,6 +225,31 @@ System:
   exporter on port 9835, open on `tailscale0` only, which needs the `nvidia`
   module and works on GeForce cards), and the desktop
   modules.
+- `vulnerability-scan` (`homelab.vulnerabilityScan.enable`): Trivy, from
+  nixpkgs, scans the image of every container in
+  `virtualisation.oci-containers.containers` once a day
+  (`homelab.vulnerabilityScan.schedule`), read from the host's podman
+  storage with `podman save` and never pulled. Only the save runs as root;
+  Trivy runs as a DynamicUser with no capabilities and a read-only system.
+  It fetches its vulnerability database from `mirror.gcr.io` (`ghcr.io` as
+  fallback) over HTTPS on each run, and keeps the last one when that fails.
+  The counts reach Prometheus through the textfile collector, without CVE
+  ids: `homelab_image_vulnerabilities{image, container, severity,
+  fixable}` per severity (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) and whether
+  a fixed version exists, `homelab_image_scan_success{container}`,
+  `homelab_image_scan_timestamp_seconds{container}` and
+  `homelab_vulnerability_db_age_seconds`. Each container's full report is
+  `/var/lib/vulnerability-scan/<container>.json`; read it on the host as
+  root, for example its critical findings with
+  `jq '.Results[].Vulnerabilities[]? | select(.Severity == "CRITICAL")' /var/lib/vulnerability-scan/caddy.json`,
+  or the fixable ones with `select((.FixedVersion // "") != "")`. Run a
+  scan now with `systemctl start vulnerability-scan`. While it runs, the
+  saved images take about their size in `/var/cache`; an image that would
+  leave less than a tenth of that filesystem free, or 5 GiB, is skipped
+  and its scan fails. Images built with
+  Nix (vaka's) have no package database, so only their Go binaries'
+  modules are seen; podium's rootless images are not scanned
+  (docs/adr/0017-running-images-are-scanned.md).
 - `tsidp` (`homelab.tsidp`): tsidp, Tailscale's OpenID Connect provider,
   with nixpkgs' `services.tsidp`, as its own tailnet node
   `homelab.tsidp.hostName` (`idp`); the issuer is
@@ -402,7 +429,13 @@ socket: its group, socket and directory modes, the mount, and the restart
 trigger that makes a switch create it anew. The `forgejo-deploy-ca` check
 holds Forgejo's SSH settings to `homelab.forgejo.trustDeployCa`: with it
 on, the deploy CA keys and principals limited to user names; off, no CA
-and no principals. The checks also run the `forgejo-admin` and `forgejo-oidc` scripts against
+and no principals. The `vulnerability-scan-images` check holds the example server's scan to
+exactly its containers' images, with only the save and publish steps as
+root, and the `vulnerability-scan` check runs the scan's script against a
+stubbed podman and Trivy with a fixture report. The `alert-rules` check
+turns the example's Grafana rules into Prometheus rules, parses every
+query with promtool and tests the vulnerability rules in it.
+The checks also run the `forgejo-admin` and `forgejo-oidc` scripts against
 stubs, the `tsidp-clients` script against a fake tsidp state directory,
 and the Caddy identity snippets in a real Caddy.
 

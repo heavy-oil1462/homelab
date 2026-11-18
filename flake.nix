@@ -52,6 +52,7 @@
         logging-agent = ./modules/logging-agent.nix;
         acme = ./modules/acme.nix;
         backups = ./modules/backups.nix;
+        vulnerability-scan = ./modules/vulnerability-scan.nix;
         tsidp = ./modules/tsidp.nix;
         nvidia = ./modules/nvidia.nix;
         vm-disko = ./modules/vm-disko.nix;
@@ -175,6 +176,18 @@
             modules = [{ homelab.forgejo.trustDeployCa = nixpkgs.lib.mkForce false; }];
           }).config;
         };
+        # The example server's vulnerability-scan unit scans exactly its
+        # containers' images, and its scan step runs unprivileged.
+        vulnerability-scan-images = pkgs.callPackage ./tests/vulnerability-scan-images.nix {
+          config = exampleServer.config;
+        };
+        # The vulnerability-scan script against a stubbed podman and trivy
+        # and a fixture report: counts per severity and fixable, no CVE
+        # labels, the exposition format.
+        vulnerability-scan = pkgs.callPackage ./tests/vulnerability-scan.nix { };
+        # The example's alert rules in promtool: every query parses, and the
+        # vulnerability rules alert on what they should.
+        alert-rules = pkgs.callPackage ./tests/alert-rules.nix { };
         # The forgejo-oidc unit's script against a stubbed podman and systemctl.
         forgejo-oidc = pkgs.callPackage ./tests/forgejo-oidc.nix { };
         # The script writing tsidp's declared clients, against a fake state
