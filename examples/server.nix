@@ -12,6 +12,7 @@
     ../modules/backups.nix
     ../modules/vulnerability-scan.nix
     ../modules/tsidp.nix
+    ../modules/pocket-id.nix
     ../modules/nvidia.nix
     ../containers/reverse-proxy.nix
     ../containers/observability.nix
@@ -55,6 +56,14 @@
       };
       # tsidp's node and signing keys and its registered clients.
       jobs.tsidp.paths = [ config.homelab.tsidp.stateDir ];
+      # Pocket ID's users, passkeys, clients and encrypted signing keys,
+      # with a consistent copy of its database. The encryption key in
+      # /var/lib/secrets is not in the backup; keep it with the restic
+      # password.
+      jobs.pocket-id = {
+        paths = [ config.homelab.pocketId.dataDir ];
+        sqliteDatabases = [ config.homelab.pocketId.databaseFile ];
+      };
     };
 
     # Trivy scans the images of every container below once a day, from
@@ -88,6 +97,18 @@
         })
       ];
     };
+
+    # Pocket ID at https://id.home.example.com, the site's OpenID Connect
+    # provider, which replaces tsidp
+    # (docs/adr/0018-pocket-id-is-the-oidc-provider.md). A service moving
+    # to it declares its client here, as
+    #   clients.grafana = {
+    #     redirectUris = [ "https://status.${config.homelab.domain}/login/generic_oauth" ];
+    #     owner = "grafana";
+    #     units = [ "podman-grafana.service" ];
+    #   };
+    # and pocket-id-clients writes the client's id and secret files.
+    pocketId.enable = true;
 
     reverseProxy = {
       caddyfile = ./assets/caddy/Caddyfile;

@@ -7,6 +7,7 @@ let
 
   forgejoAuth = config.homelab.forgejo.proxyAuth;
   grafanaAuth = config.homelab.observability.grafanaProxyAuth;
+  pocketId = config.homelab.pocketId;
 
   # Snippets that turn the tailnet login from tailnet_identity into what a
   # service accepts, for the services with proxy authentication on. Each
@@ -140,7 +141,10 @@ in
         # Forgejo's HTTP socket with proxy authentication on; containers/forgejo.nix
         # creates the directory. Mounting the directory rather than the socket
         # keeps it working when Forgejo restarts and makes a new socket.
-        ++ lib.optional forgejoAuth.enable "/run/forgejo-http:/run/forgejo-http";
+        ++ lib.optional forgejoAuth.enable "/run/forgejo-http:/run/forgejo-http"
+        # Pocket ID's socket (modules/pocket-id.nix), in a directory of the
+        # caddy group; mounted as a directory for the same reason.
+        ++ lib.optional pocketId.enable "${dirOf pocketId.socket}:${dirOf pocketId.socket}";
         extraOptions = [
           "--security-opt=no-new-privileges"
           "--cap-drop=ALL"

@@ -834,6 +834,169 @@ in
       };
     };
 
+    pocketId = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Run Pocket ID, the site's OpenID Connect provider, with nixpkgs'
+          services.pocket-id, behind Caddy at homelab.pocketId.url
+          (docs/adr/0018-pocket-id-is-the-oidc-provider.md). It listens only
+          on a unix socket that the caddy container mounts, so it needs the
+          reverse proxy on the same host. Its owner signs in with a passkey;
+          docs/pocket-id.md has the first run.
+        '';
+      };
+      hostName = lib.mkOption {
+        type = lib.types.strMatching "[a-z0-9]([a-z0-9-]*[a-z0-9])?";
+        default = "id";
+        description = ''
+          Pocket ID's name under homelab.domain. Passkeys are bound to the
+          host name, so changing it later means registering them again.
+          The Caddyfile needs a site of that name.
+        '';
+      };
+      url = lib.mkOption {
+        type = lib.types.str;
+        default = "https://${cfg.pocketId.hostName}.${cfg.domain}";
+        defaultText = lib.literalExpression ''"https://''${homelab.pocketId.hostName}.''${homelab.domain}"'';
+        readOnly = true;
+        description = ''
+          Pocket ID's URL, which is also the issuer URL of the services
+          that sign in through it.
+        '';
+      };
+      socket = lib.mkOption {
+        type = lib.types.str;
+        default = "/run/pocket-id-http/pocket-id.sock";
+        readOnly = true;
+        description = ''
+          The unix socket Pocket ID serves HTTP on, for Caddy's
+          reverse_proxy (unix//run/pocket-id-http/pocket-id.sock). Its
+          directory is mounted into the caddy container.
+        '';
+      };
+      dataDir = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/lib/pocket-id";
+        readOnly = true;
+        description = ''
+          Where Pocket ID keeps its SQLite database, its uploads and the
+          ids of the declared clients. Back it up with a
+          homelab.backups.jobs entry that lists
+          homelab.pocketId.databaseFile as a SQLite database.
+        '';
+      };
+      databaseFile = lib.mkOption {
+        type = lib.types.str;
+        default = "${cfg.pocketId.dataDir}/data/pocket-id.db";
+        defaultText = lib.literalExpression ''"''${homelab.pocketId.dataDir}/data/pocket-id.db"'';
+        readOnly = true;
+        description = "Pocket ID's SQLite database, for homelab.backups.jobs.<name>.sqliteDatabases.";
+      };
+      encryptionKeyFile = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/lib/secrets/pocket-id-encryption-key";
+        description = ''
+          The key Pocket ID encrypts its signing keys with in the database,
+          owned by root, mode 0400. Generated on the first start, while
+          there is no database yet; with a database and no key Pocket ID
+          does not start, since the database cannot be read without it.
+          Keep a copy outside the host: a restored database needs this key.
+        '';
+      };
+      apiKeyFile = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/lib/secrets/pocket-id-api-key";
+        description = ''
+          Pocket ID's static admin API key, which the pocket-id-clients unit
+          declares the clients with, owned by root, mode 0400. Generated
+          when missing; a new one takes effect when Pocket ID restarts.
+        '';
+      };
+      clients = lib.mkOption {
+        default = { };
+        example = lib.literalExpression ''
+          {
+            grafana = {
+              displayName = "Grafana";
+              redirectUris = [ "https://status.example.com/login/generic_oauth" ];
+              owner = "grafana";
+              units = [ "podman-grafana.service" ];
+            };
+          }
+        '';
+        description = ''
+          OIDC clients declared in Pocket ID, keyed by client id
+          (docs/adr/0018-pocket-id-is-the-oidc-provider.md). Once Pocket ID
+          answers, the pocket-id-clients unit creates or updates each one
+          through Pocket ID's admin API and writes its id and secret files.
+          Pocket ID makes the secret; a missing secret file, or one Pocket ID
+          no longer accepts, gets a new secret. Clients created in Pocket
+          ID's admin UI are left alone; a client removed here is deleted
+          from Pocket ID, its files are left.
+        '';
+        type = lib.types.attrsOf (lib.types.submodule ({ name, ... }: {
+          options = {
+            displayName = lib.mkOption {
+              type = lib.types.strMatching ".{1,50}";
+              default = name;
+              description = "The client's name, shown on Pocket ID's consent and apps pages.";
+            };
+            redirectUris = lib.mkOption {
+              type = lib.types.nonEmptyListOf (lib.types.strMatching "https?://[^[:space:]]+");
+              description = ''
+                The redirect URIs Pocket ID accepts for this client. Pocket
+                ID takes * as a wildcard in them.
+              '';
+            };
+            logoutRedirectUris = lib.mkOption {
+              type = lib.types.listOf (lib.types.strMatching "https?://[^[:space:]]+");
+              default = [ ];
+              description = "Where Pocket ID may send the browser after signing out of this client.";
+            };
+            pkce = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Require PKCE from this client, for clients that send it.";
+            };
+            idFile = lib.mkOption {
+              type = lib.types.str;
+              default = "/var/lib/secrets/${name}-oidc-client-id";
+              description = "File the client id is written to, for the service to read.";
+            };
+            secretFile = lib.mkOption {
+              type = lib.types.str;
+              default = "/var/lib/secrets/${name}-oidc-client-secret";
+              description = ''
+                File the client secret is written to. To rotate it, empty
+                the file and restart pocket-id-clients.
+              '';
+            };
+            owner = lib.mkOption {
+              type = lib.types.str;
+              default = "root";
+              example = "grafana";
+              description = ''
+                User owning the id and secret files, with that user's group;
+                both are mode 0400. The user the service reads them as.
+              '';
+            };
+            units = lib.mkOption {
+              type = lib.types.listOf (lib.types.strMatching "[A-Za-z0-9@._:-]+\\.(service|target)");
+              default = [ ];
+              example = [ "podman-grafana.service" ];
+              description = ''
+                systemd units that read the client's files. They start after
+                pocket-id-clients and pull it in, and are restarted when it
+                writes a new id or secret.
+              '';
+            };
+          };
+        }));
+      };
+    };
+
     agentSandbox = {
       gitName = lib.mkOption {
         type = lib.types.nullOr lib.types.str;

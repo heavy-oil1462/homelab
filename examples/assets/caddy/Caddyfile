@@ -75,6 +75,14 @@ status.__DOMAIN__:443 {
 	reverse_proxy grafana:3000
 }
 
+# Pocket ID, the site's OpenID Connect provider (homelab.pocketId), on the
+# socket its module makes; only Caddy mounts its directory. The site's name
+# is homelab.pocketId.hostName.
+id.__DOMAIN__:443 {
+	import site_tls
+	reverse_proxy unix//run/pocket-id-http/pocket-id.sock
+}
+
 metrics.__DOMAIN__:443 {
 	import site_tls
 	reverse_proxy prometheus:9090
