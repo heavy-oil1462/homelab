@@ -64,3 +64,5 @@ never reaches the workers.
   unprivileged, with dropped capabilities (Accepted)
 - [ADR-0015](0015-forgejo-trusts-the-deploy-ca.md): Forgejo's SSH server
   trusts the deploy CA (Accepted)
+- [ADR-0016](0016-image-updates-as-reviewed-bumps.md): Container image
+  updates are found by a tool and land as reviewed bumps (Accepted)

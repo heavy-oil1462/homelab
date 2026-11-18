@@ -61,6 +61,9 @@ something is waiting for my approval. Can that be made more clear".
   owner's remaining steps are listed (DIRECTION.md, How to work).
 - The supervisor never leaves its own change sets for the owner to
   approve. Docs changes go through a worker issue like any other.
+- With each status report, run `skills/image-updates` against homelab
+  and homelab-config; file one bump issue per repository for the updates
+  found, security-relevant first (ADR-0016).
 
 ## Lessons
 

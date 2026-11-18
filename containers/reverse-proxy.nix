@@ -113,7 +113,7 @@ in
       security.acme.certs.${domain}.group = "caddy";
 
       virtualisation.oci-containers.containers.caddy = {
-        image = "docker.io/library/caddy@sha256:25cdc846626b62d05f6b633b9b40c2c9f6ef89b515dc76133cefd920f7dbe562";
+        image = "docker.io/library/caddy@sha256:25cdc846626b62d05f6b633b9b40c2c9f6ef89b515dc76133cefd920f7dbe562"; # 2.11.2, :2 as of 2026-07-18
         # When homelab.tailnetIp is set, publishing 443 bound to that address
         # (instead of 0.0.0.0) is what makes every site tailnet-only: there is
         # simply no listener on the LAN interfaces. This replaces a per-vhost

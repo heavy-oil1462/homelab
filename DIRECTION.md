@@ -82,6 +82,8 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
 4. Failures alert: provisioned rules for failed backups and units, disk,
    host down and certificate expiry, with a contact point.
 5. Image digests and `flake.lock` stay current without manual tracking.
+   image-updates finds moved tags; bumps are reviewed issues (owner, board,
+   2026-11-18).
 6. New services the owner picks on the board.
 
 ## Not now
