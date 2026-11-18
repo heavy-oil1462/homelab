@@ -84,6 +84,9 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
 5. Image digests and `flake.lock` stay current without manual tracking.
    image-updates finds moved tags; bumps are reviewed issues (owner, board,
    2026-11-18).
+   Running images are scanned daily for known vulnerabilities, and fixable
+   critical or high ones alert; fixes land as reviewed bumps (owner, board,
+   2026-11-18; ADR-0017).
 6. New services the owner picks on the board.
 
 ## Not now

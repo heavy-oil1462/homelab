@@ -48,7 +48,9 @@ Java database, for images with JAR files, comes the same way from
   random delay, and catches a missed run up after boot.
 - Images are read from the local storage with `podman save`, by image id,
   into a docker-archive in `/var/cache/vulnerability-scan`, and Trivy scans
-  each archive with `--input`. Nothing is pulled.
+  each archive with `--input`. Nothing is pulled. An image whose archive
+  would leave less than a tenth of that filesystem free, or 5 GiB, is not
+  saved.
 - The unit runs as a `DynamicUser` with `ProtectSystem=strict`, no
   capabilities, a system call filter and no access to podman. Only two steps
   run as root, outside that sandbox (`+`): the save, which needs podman's
@@ -101,7 +103,14 @@ Java database, for images with JAR files, comes the same way from
   which they could already. Hosts without that access get no database and
   every scan fails, which the stale rule reports after 3 days.
 - While a run lasts, the archives take about as much room in `/var/cache`
-  as the images in podman's storage. Each is removed once scanned.
+  as the images in podman's storage, usually on the same filesystem. Each
+  is removed once scanned. So that a daily background job cannot fill the
+  root filesystem, save measures the free space before each image and
+  skips one whose size would leave less than a tenth of the filesystem, or
+  5 GiB if that is more, with a message in the journal. Its scan then
+  fails and shows in `homelab_image_scan_success`, and after 3 days in the
+  stale rule. A host short of space gets some images unscanned rather
+  than a full disk.
 - Images built with Nix, vaka's among them, have no OS package database, so
   Trivy sees only what it finds in their files, mainly the modules built
   into Go binaries. A vulnerable C library in such an image does not show.

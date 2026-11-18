@@ -244,7 +244,9 @@ System:
   `jq '.Results[].Vulnerabilities[]? | select(.Severity == "CRITICAL")' /var/lib/vulnerability-scan/caddy.json`,
   or the fixable ones with `select((.FixedVersion // "") != "")`. Run a
   scan now with `systemctl start vulnerability-scan`. While it runs, the
-  saved images take about their size in `/var/cache`. Images built with
+  saved images take about their size in `/var/cache`; an image that would
+  leave less than a tenth of that filesystem free, or 5 GiB, is skipped
+  and its scan fails. Images built with
   Nix (vaka's) have no package database, so only their Go binaries'
   modules are seen; podium's rootless images are not scanned
   (docs/adr/0017-running-images-are-scanned.md).
