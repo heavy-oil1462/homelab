@@ -10,6 +10,7 @@
     ../roles/server.nix
     ../modules/acme.nix
     ../modules/backups.nix
+    ../modules/vulnerability-scan.nix
     ../modules/tsidp.nix
     ../modules/nvidia.nix
     ../containers/reverse-proxy.nix
@@ -55,6 +56,11 @@
       # tsidp's node and signing keys and its registered clients.
       jobs.tsidp.paths = [ config.homelab.tsidp.stateDir ];
     };
+
+    # Trivy scans the images of every container below once a day, from
+    # podman's storage; the counts reach Prometheus through the node
+    # exporter, and the reports stay in /var/lib/vulnerability-scan.
+    vulnerabilityScan.enable = true;
 
     # Forgejo and Grafana sign in through tsidp, at
     # https://idp.<tailnet>.ts.net, which joins the tailnet with the auth
