@@ -25,7 +25,10 @@ in
   ];
 
   virtualisation.oci-containers.containers.home-assistant = {
-    image = "ghcr.io/home-assistant/home-assistant@sha256:aed891b8f801072302815b4b0fab5adb714182967e9d2e2d4a2be558241c73ad"; # :stable as of 2026-06-13
+    # 2026.11.2. Upgrading from 2026.6 migrates /config/.storage one way
+    # (device registry 3.4); going back means restoring .storage from a
+    # backup (README).
+    image = "ghcr.io/home-assistant/home-assistant@sha256:493a07e8f6530fc640223f4a0a5248f20a61ca2f718bb1d31efbf08a2c5ea28f"; # :stable as of 2026-11-18
     autoStart = true;
     # Runs as root: the image's s6-overlay init and Home Assistant itself
     # expect root, and with host networking it reaches the LAN's devices
