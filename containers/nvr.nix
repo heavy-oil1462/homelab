@@ -37,7 +37,7 @@ in
 
   virtualisation.oci-containers.containers = {
     frigate = {
-      image = "ghcr.io/blakeblackshear/frigate@sha256:643667fdb054089277d45efdd33849248f628cbb76b6329950ec8cf217fa6107";
+      image = "ghcr.io/blakeblackshear/frigate@sha256:643667fdb054089277d45efdd33849248f628cbb76b6329950ec8cf217fa6107"; # 0.17.1-tensorrt, :0.17.1-tensorrt as of 2026-07-18
       autoStart = true;
       # Runs as root: the image's s6-overlay init, nginx and go2rtc expect
       # it, and Frigate supports no other setup. It is on the root

@@ -197,6 +197,20 @@
           };
         # The grafana-git-sync unit's script against a stand-in for Grafana.
         grafana-git-sync = pkgs.callPackage ./tests/grafana-git-sync.nix { };
+        # The skills' Python: image-updates against a fake registry on
+        # 127.0.0.1, and every image pin in containers/ naming its tag.
+        skills = pkgs.runCommand "skills-test"
+          {
+            nativeBuildInputs = [ pkgs.python3 ];
+            src = nixpkgs.lib.fileset.toSource {
+              root = ./.;
+              fileset = nixpkgs.lib.fileset.unions [ ./lib ./skills ./containers ./tests/test_images.py ];
+            };
+          } ''
+          cd "$src"
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py' -v
+          touch "$out"
+        '';
         # The example Caddyfile's tailnet_identity snippet in a real Caddy.
         tailnet-identity = pkgs.callPackage ./tests/tailnet-identity.nix { };
         # The identity snippets the reverse proxy generates for the example
