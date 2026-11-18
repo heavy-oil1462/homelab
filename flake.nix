@@ -185,6 +185,9 @@
         # and a fixture report: counts per severity and fixable, no CVE
         # labels, the exposition format.
         vulnerability-scan = pkgs.callPackage ./tests/vulnerability-scan.nix { };
+        # The example's alert rules in promtool: every query parses, and the
+        # vulnerability rules alert on what they should.
+        alert-rules = pkgs.callPackage ./tests/alert-rules.nix { };
         # The forgejo-oidc unit's script against a stubbed podman and systemctl.
         forgejo-oidc = pkgs.callPackage ./tests/forgejo-oidc.nix { };
         # The script writing tsidp's declared clients, against a fake state

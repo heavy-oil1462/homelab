@@ -1,0 +1,58 @@
+# promtool unit tests of the example's alert rules, as tests/alert-rules.nix
+# converts them. Time starts at 0. Samples are a minute apart, as a series
+# without a sample in the last 5 minutes is gone to Prometheus.
+rule_files:
+  - rules.json
+
+evaluation_interval: 1m
+
+tests:
+  # Fixable CRITICAL and HIGH counts of one container alert as one, after a
+  # day. Unfixable ones, MEDIUM ones and zero counts do not.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_image_vulnerabilities{instance="host:9100", job="node-exporter", image="example.invalid/caddy:2", container="caddy", severity="CRITICAL", fixable="true"}'
+        values: '1x1600'
+      - series: 'homelab_image_vulnerabilities{instance="host:9100", job="node-exporter", image="example.invalid/caddy:2", container="caddy", severity="HIGH", fixable="true"}'
+        values: '2x1600'
+      - series: 'homelab_image_vulnerabilities{instance="host:9100", job="node-exporter", image="example.invalid/grafana:13", container="grafana", severity="CRITICAL", fixable="false"}'
+        values: '3x1600'
+      - series: 'homelab_image_vulnerabilities{instance="host:9100", job="node-exporter", image="example.invalid/grafana:13", container="grafana", severity="MEDIUM", fixable="true"}'
+        values: '5x1600'
+      - series: 'homelab_image_vulnerabilities{instance="host:9100", job="node-exporter", image="example.invalid/grafana:13", container="grafana", severity="HIGH", fixable="true"}'
+        values: '0x1600'
+    alert_rule_test:
+      - eval_time: 23h
+        alertname: homelab-image-vulnerable
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: homelab-image-vulnerable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: host:9100
+              job: node-exporter
+              image: example.invalid/caddy:2
+              container: caddy
+              fixable: "true"
+
+  # A container last scanned at time 0 alerts once 3 days and the hold of
+  # an hour have passed; one whose timestamp keeps up with time does not.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_image_scan_timestamp_seconds{instance="host:9100", job="node-exporter", container="caddy"}'
+        values: '0x4500'
+      - series: 'homelab_image_scan_timestamp_seconds{instance="host:9100", job="node-exporter", container="grafana"}'
+        values: '0+60x4500'
+    alert_rule_test:
+      - eval_time: 72h30m
+        alertname: homelab-image-scan-stale
+        exp_alerts: []
+      - eval_time: 74h
+        alertname: homelab-image-scan-stale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: host:9100
+              job: node-exporter
+              container: caddy
