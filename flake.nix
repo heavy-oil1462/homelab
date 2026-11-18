@@ -54,6 +54,7 @@
         backups = ./modules/backups.nix;
         vulnerability-scan = ./modules/vulnerability-scan.nix;
         tsidp = ./modules/tsidp.nix;
+        pocket-id = ./modules/pocket-id.nix;
         nvidia = ./modules/nvidia.nix;
         vm-disko = ./modules/vm-disko.nix;
         yubikey = ./modules/yubikey.nix;
@@ -211,6 +212,31 @@
         # The script writing tsidp's declared clients, against a fake state
         # directory.
         tsidp-clients = pkgs.callPackage ./tests/tsidp-clients.nix { };
+        # The script declaring Pocket ID's clients, against a stand-in for
+        # its admin API and a stubbed systemctl.
+        pocket-id-clients = pkgs.callPackage ./tests/pocket-id-clients.nix { };
+        # The example server's Pocket ID with two clients declared: the
+        # spec the unit gets, its ordering before the clients' units, the
+        # socket Caddy mounts and the backup.
+        pocket-id-module = pkgs.callPackage ./tests/pocket-id-module.nix {
+          config = (exampleServer.extendModules {
+            modules = [{
+              homelab.pocketId.clients = {
+                forgejo = {
+                  redirectUris = [ "https://git.home.example.com/user/oauth2/pocket-id/callback" ];
+                  units = [ "forgejo-oidc.service" ];
+                };
+                grafana = {
+                  displayName = "Grafana";
+                  redirectUris = [ "https://status.home.example.com/login/generic_oauth" ];
+                  pkce = true;
+                  owner = "grafana";
+                  units = [ "podman-grafana.service" ];
+                };
+              };
+            }];
+          }).config;
+        };
         # The CDI spec check of GPU containers against stub specs, and its
         # place in the example server's Frigate unit. The unit's strings are
         # compared, never run: their string context is discarded, so the

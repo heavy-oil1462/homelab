@@ -68,3 +68,5 @@ never reaches the workers.
   updates are found by a tool and land as reviewed bumps (Accepted)
 - [ADR-0017](0017-running-images-are-scanned.md): Running images are
   scanned for known vulnerabilities (Accepted)
+- [ADR-0018](0018-pocket-id-is-the-oidc-provider.md): Pocket ID is the
+  site's OIDC provider (Accepted)
