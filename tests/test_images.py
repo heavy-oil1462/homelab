@@ -178,9 +178,10 @@ class RealPins(unittest.TestCase):
         self.assertEqual(p.tag, "8.0")
         self.assertRegex(p.version, r"^8\.0\.\d+$")
         self.assertEqual(p.image, "docker.io/library/mongo")
-        # Tag only.
+        # Version and a tag that is no version.
         p = self.by_name["home-assistant"]
-        self.assertEqual((p.tag, p.version), ("stable", None))
+        self.assertEqual(p.tag, "stable")
+        self.assertRegex(p.version, r"^\d{4}\.\d+\.\d+$")
         # Tag with a note between it and the date.
         p = self.by_name["all-in-one"]
         self.assertEqual((p.tag, p.version), ("latest", None))
@@ -195,6 +196,9 @@ class Parsing(unittest.TestCase):
     def test_comment(self):
         self.assertEqual(images.parse_comment(" 1.37.1, :latest as of 2026-08-04"),
                          ("1.37.1", "latest", "", "2026-08-04"))
+        # Tag only.
+        self.assertEqual(images.parse_comment(" :stable as of 2026-06-13"),
+                         (None, "stable", "", "2026-06-13"))
         self.assertEqual(images.parse_comment(" :latest (built 2026-11-03, revision 97ef10c) as of 2026-11-12"),
                          (None, "latest", " (built 2026-11-03, revision 97ef10c)", "2026-11-12"))
         self.assertEqual(images.parse_comment(" pinned by hand")[1], None)
