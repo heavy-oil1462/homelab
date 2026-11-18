@@ -242,7 +242,8 @@ System:
   modules.
 - `vulnerability-scan` (`homelab.vulnerabilityScan.enable`): Trivy, from
   nixpkgs, scans the image of every container in
-  `virtualisation.oci-containers.containers` once a day
+  `virtualisation.oci-containers.containers` that root's podman runs, once
+  a day
   (`homelab.vulnerabilityScan.schedule`), read from the host's podman
   storage with `podman save` and never pulled. Only the save runs as root;
   Trivy runs as a DynamicUser with no capabilities and a read-only system.
@@ -263,7 +264,8 @@ System:
   leave less than a tenth of that filesystem free, or 5 GiB, is skipped
   and its scan fails. Images built with
   Nix (vaka's) have no package database, so only their Go binaries'
-  modules are seen; podium's rootless images are not scanned
+  modules are seen. Containers whose `podman.user` is set to another user
+  than root run in that user's rootless podman and are not scanned
   (docs/adr/0017-running-images-are-scanned.md).
 - `tsidp` (`homelab.tsidp`): tsidp, Tailscale's OpenID Connect provider,
   with nixpkgs' `services.tsidp`, as its own tailnet node

@@ -177,9 +177,19 @@
           }).config;
         };
         # The example server's vulnerability-scan unit scans exactly its
-        # containers' images, and its scan step runs unprivileged.
+        # containers' images, and its scan step runs unprivileged. A
+        # container in a user's rootless podman is added and must not be
+        # scanned (ADR-0017).
         vulnerability-scan-images = pkgs.callPackage ./tests/vulnerability-scan-images.nix {
-          config = exampleServer.config;
+          config = (exampleServer.extendModules {
+            modules = [{
+              users.users.rootless-test = { isNormalUser = true; linger = true; };
+              virtualisation.oci-containers.containers.rootless-test = {
+                image = "registry.example.com/rootless-test@sha256:${nixpkgs.lib.fixedWidthString 64 "0" ""}";
+                podman.user = "rootless-test";
+              };
+            }];
+          }).config;
         };
         # The vulnerability-scan script against a stubbed podman and trivy
         # and a fixture report: counts per severity and fixable, no CVE
