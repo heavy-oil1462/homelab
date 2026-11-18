@@ -120,8 +120,23 @@ Services (OCI containers, pinned by digest):
   (docs/adr/0009-dashboards-through-grafana-git-sync.md,
   docs/adr/0011-git-sync-seeds-an-empty-repository.md).
 - `vaultwarden`, `homepage` (runs as the homepage user, with the files it
-  writes itself in the volumes `homepage-config` and `homepage-cache`),
-  `homeassistant` (runs as root, with host networking).
+  writes itself in the volumes `homepage-config` and `homepage-cache`).
+- `homeassistant`: runs as root, with host networking; its state is the
+  `homeassistant-config` volume, mounted at `/config`. Upgrading from
+  2026.6 or earlier to 2026.11 migrates `/config/.storage` one way: the
+  device registry moves to a storage version the older release cannot
+  read. Back up first (an HA backup, or a copy of `/config`); to go back,
+  restore `/config/.storage` from that backup along with the older pin.
+  The recorder database is unchanged. From 2026.8, the first start reads
+  the `http:` block of `configuration.yaml` into `.storage/http` and
+  ignores it from then on: change trusted proxies under Settings > System >
+  Network, not in the file. Where the stored config already matches the
+  file, as on a host upgraded from 2026.6 that has run with the same
+  `http:` block, it is taken over as it is. Otherwise, such as on a new
+  host, it is applied as a trial: confirm it within five minutes in the
+  network settings, or Home Assistant restarts without the reverse proxy
+  settings and answers the proxy with 400. Automations that use a trigger
+  renamed in 2026.7 stop working until edited; they show under Repairs.
 - `nextcloud`: Nextcloud All-in-One mastercontainer, pinned by digest. Its
   admin UI (8080) and the Apache container it starts (11000) bind to
   `homelab.nextcloud.bindAddress`, the tailnet address by default. To reach
