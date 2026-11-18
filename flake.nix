@@ -166,6 +166,14 @@
             example-server-proxy-auth = exampleServerProxyAuth.config;
           };
         };
+        # The logging agent labels journal lines with their unit and
+        # container, and the body stays the journal record: the example
+        # server's fluent-bit config, evaluated and run against a stand-in
+        # for Loki.
+        logging-labels = pkgs.callPackage ./tests/logging-labels.nix {
+          inherit (exampleServer.config.services.fluent-bit) settings;
+          inherit (exampleServer.config.networking) hostName;
+        };
         # The forgejo-admin unit's script against a stubbed podman.
         forgejo-admin = pkgs.callPackage ./tests/forgejo-admin.nix { };
         # Forgejo's SSH server trusts the deploy CA with
@@ -211,13 +219,14 @@
         # The grafana-git-sync unit's script against a stand-in for Grafana.
         grafana-git-sync = pkgs.callPackage ./tests/grafana-git-sync.nix { };
         # The skills' Python: image-updates against a fake registry on
-        # 127.0.0.1, and every image pin in containers/ naming its tag.
+        # 127.0.0.1, every image pin in containers/ naming its tag, and the
+        # service-logs queries against a stub Loki client.
         skills = pkgs.runCommand "skills-test"
           {
             nativeBuildInputs = [ pkgs.python3 ];
             src = nixpkgs.lib.fileset.toSource {
               root = ./.;
-              fileset = nixpkgs.lib.fileset.unions [ ./lib ./skills ./containers ./tests/test_images.py ];
+              fileset = nixpkgs.lib.fileset.unions [ ./lib ./skills ./containers ./tests/test_images.py ./tests/test_logs.py ];
             };
           } ''
           cd "$src"

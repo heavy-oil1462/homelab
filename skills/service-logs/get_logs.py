@@ -40,7 +40,9 @@ def parse_level(s: str) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch service logs from Loki.")
     parser.add_argument("--host", help="limit to one host by hostname (omit for all)")
-    parser.add_argument("-s", "--service", help="match unit/identifier/container (substring)")
+    parser.add_argument("-u", "--unit", help="exact systemd unit, e.g. caddy.service (selected by label)")
+    parser.add_argument("-c", "--container", help="exact container name, e.g. vaka (selected by label)")
+    parser.add_argument("-s", "--service", help="match unit/identifier/container (substring, reads every line)")
     parser.add_argument("--since", type=parse_duration, default=3600, help="time window, e.g. 30m, 2h, 1d (default 1h)")
     parser.add_argument("--level", type=parse_level, help="minimum severity: name or 0-7 (e.g. warning)")
     parser.add_argument("--grep", help="case-insensitive regex on the message")
@@ -53,6 +55,8 @@ def main() -> None:
         rows = fetch_logs(
             host=args.host,
             service=args.service,
+            unit=args.unit,
+            container=args.container,
             since_seconds=args.since,
             limit=args.limit,
             priority=args.level,

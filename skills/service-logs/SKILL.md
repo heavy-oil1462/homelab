@@ -7,22 +7,30 @@ description: Read service and system logs from the homelab hosts via Loki, inste
 
 Read-only access to the systemd-journal logs collected in Loki, so you can
 read service logs without SSHing into a host. Every server ships its journal
-via fluent-bit under `job="systemd-journal"` with a `host` label; the service
-identity (unit, syslog identifier, container name), priority, and message are
-fields inside each JSON line.
+via fluent-bit under `job="systemd-journal"` with a `host` label, a `unit`
+label (`_SYSTEMD_UNIT`) and, for container lines, a `container` label
+(`CONTAINER_NAME`). Each line is the journal record as JSON, so the syslog
+identifier, priority and message are fields inside it.
 
 ## Scripts
 
 Fetch logs, filtered:
 
 ```
-python3 "${CLAUDE_SKILL_DIR}/get_logs.py" [--host H] [-s SERVICE] [--since 2h] [--level warning] [--grep REGEX] [--limit N]
+python3 "${CLAUDE_SKILL_DIR}/get_logs.py" [--host H] [-u UNIT | -c CONTAINER | -s SERVICE] [--since 2h] [--level warning] [--grep REGEX] [--limit N]
 ```
 
 - `--host`: limit to one host by hostname (omit for all; the host-metrics
   skill lists the hostnames).
+- `-u/--unit`: the exact systemd unit (`-u restic-backups-forgejo.service`,
+  `-u podman-caddy.service`). Selected by the `unit` label, so Loki reads
+  only that unit's lines. Prefer it when you know the name.
+- `-c/--container`: the exact container name (`-c vaka`), by the `container`
+  label likewise.
 - `-s/--service`: case-insensitive substring matched against the systemd unit,
   the syslog identifier, and the container name (e.g. `-s caddy`, `-s restic`).
+  It parses every line of the window, so on a busy host a long window is
+  slow; use it to find a name, then `-u` or `-c`.
 - `--since`: time window, `30m`, `2h`, `1d` (default 1h).
 - `--level`: minimum severity, a name (`emerg alert crit err warning notice info debug`)
   or number 0-7. Keeps that level and worse.
@@ -46,7 +54,10 @@ Lists units by line count over the window.
 python3 "${CLAUDE_SKILL_DIR}/get_logs.py" --host myserver -s caddy --level err --since 6h
 
 # Why the vaultwarden backup failed
-python3 "${CLAUDE_SKILL_DIR}/get_logs.py" -s restic-backups-vaultwarden --since 1d
+python3 "${CLAUDE_SKILL_DIR}/get_logs.py" -u restic-backups-vaultwarden.service --since 1d
+
+# Everything the vaka container logged on one host today
+python3 "${CLAUDE_SKILL_DIR}/get_logs.py" --host myserver -c vaka --since 1d
 
 # Anything mentioning "oom" across all hosts today
 python3 "${CLAUDE_SKILL_DIR}/get_logs.py" --grep oom --since 1d
@@ -62,9 +73,13 @@ python3 "${CLAUDE_SKILL_DIR}/get_logs.py" --grep oom --since 1d
   message instead.
 - Long messages are truncated to 300 chars in the text view; pass `--full` (or
   `--json`) for the complete line. Container logs are often JSON themselves.
-- Service identity is filtered inside the JSON line, not via a Loki label, to
-  keep stream cardinality low. If unit-as-label is wanted later, fluent-bit can
-  promote `_SYSTEMD_UNIT` with `label_keys` in `modules/logging-agent.nix`.
+- `unit` and `container` are labels only on lines shipped since the logging
+  agent set them (`modules/logging-agent.nix`); older streams have only
+  `job` and `host`. `-u` and `-c` also query those with a `| json` field
+  filter, so a window reaching back before the change still finds them.
+  Writing LogQL by hand, select `{host="h", container="vaka"}` or
+  `{host="h", unit="sshd.service"}`; `| json` still works on every line.
+  Kernel lines have no unit, so no `unit` label.
 - The Loki endpoint resolves from HOMELAB_LOKI_URL, else a
   .claude/homelab-endpoints.json found upward from the current directory,
   else ~/.claude/homelab-endpoints.json (see lib/homelab/config.py at the

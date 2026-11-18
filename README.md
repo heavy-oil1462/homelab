@@ -218,7 +218,8 @@ System:
   every start and write it again when it mounts another driver, see
   [docs/nvidia.md](docs/nvidia.md)), `vm-disko` (single-disk VM layout; needs
   disko's NixOS module from your own flake, as `examples/vm.nix` shows),
-  `tailscale`, `logging-agent`, `observability-agent` (node exporter with
+  `tailscale`, `logging-agent` (fluent-bit ships the journal to Loki at
+  `homelab.logsHost`; see [Logs](#logs)), `observability-agent` (node exporter with
   the systemd collector, and the textfile collector reading
   `homelab.observabilityAgent.textfileDirectory`; with
   `homelab.observabilityAgent.nvidiaGpu.enable`, also nixpkgs' NVIDIA GPU
@@ -275,6 +276,34 @@ System:
     "app": { "tailscale.com/cap/tsidp": [{ "allow_admin_ui": true }] }
   }]
   ```
+
+## Logs
+
+`logging-agent` ships each host's journal to Loki. Every line is the journal
+record as JSON, so `| json` gives its fields (`MESSAGE`, `PRIORITY`,
+`SYSLOG_IDENTIFIER` and the rest). Its stream has the labels:
+
+- `job`: `systemd-journal`;
+- `host`: the host name;
+- `unit`: the record's `_SYSTEMD_UNIT`, such as `sshd.service`, or
+  `podman-vaka.service` for a container's lines;
+- `container`: the record's `CONTAINER_NAME`, on a container's lines.
+
+A line without the field gets no label, not an empty one: kernel lines have
+no `unit`, host services no `container`. Select by label, so Loki reads
+only that stream:
+
+```
+{host="h", container="vaka"}
+{host="h", unit="restic-backups-forgejo.service"} |= "error"
+```
+
+instead of `{host="h"} | json | CONTAINER_NAME="vaka"`, which reads and
+parses every line of the host. Lines shipped before the labels existed have
+only `job` and `host`, so for those the `| json` filter is still the way;
+select them with `unit=""`. The labels are kept to the few units and
+containers of a host; message, priority and process ids stay in the line,
+as each value of a label is a stream of its own.
 
 ## Secrets
 
@@ -435,6 +464,10 @@ root, and the `vulnerability-scan` check runs the scan's script against a
 stubbed podman and Trivy with a fixture report. The `alert-rules` check
 turns the example's Grafana rules into Prometheus rules, parses every
 query with promtool and tests the vulnerability rules in it.
+The `logging-labels` check holds the example server's fluent-bit config to
+the [log labels](#logs) and runs it against a stand-in for Loki: a
+container's line labelled with unit and container, a host service's with
+its unit, a kernel line with neither, and every body the record unchanged.
 The checks also run the `forgejo-admin` and `forgejo-oidc` scripts against
 stubs, the `tsidp-clients` script against a fake tsidp state directory,
 and the Caddy identity snippets in a real Caddy.
