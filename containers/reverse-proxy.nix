@@ -34,7 +34,8 @@ let
       (lib.mapAttrsToList (login: user: "${login} ${user}") forgejoAuth.users)
       [ "Remote-User {forgejo_user}" ]))
     (lib.optionalString grafanaAuth.enable (identitySnippet "grafana_identity" "{grafana_user} {grafana_role}"
-      (map (login: "${login} ${login} Admin") grafanaAuth.admins)
+      # unique: Caddy 2.11.6 and later refuse a map with a repeated input.
+      (map (login: "${login} ${login} Admin") (lib.unique grafanaAuth.admins))
       [ "Remote-User {grafana_user}" "Remote-Role {grafana_role}" ]))
   ];
 
