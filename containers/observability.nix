@@ -309,7 +309,7 @@ in
 
   virtualisation.oci-containers.containers = {
     prometheus = {
-      image = "docker.io/prom/prometheus@sha256:69f5241418838263316593f7274a304b095c40bcf22e57272865da91bd60a8ac"; # :latest as of 2026-06-13
+      image = "docker.io/prom/prometheus@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06"; # :latest as of 2026-11-18
       user = "${toString config.users.users.prometheus.uid}:${toString config.users.groups.prometheus.gid}";
       autoStart = true;
       extraOptions = hardening;
@@ -326,7 +326,7 @@ in
     };
 
     loki = {
-      image = "docker.io/grafana/loki@sha256:191d4fdfb7264f16989f0a57f320872620a5a7c2ceeec6229212c4190ec49b86"; # :latest as of 2026-06-13
+      image = "docker.io/grafana/loki@sha256:b43c257ccfc925d4a50b8717cac61a3b51df8c48d01847936057e5c4075a24a7"; # :latest as of 2026-11-18
       user = "${toString config.users.users.loki.uid}:${toString config.users.groups.loki.gid}";
       autoStart = true;
       extraOptions = hardening;

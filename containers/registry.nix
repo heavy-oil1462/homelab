@@ -53,7 +53,7 @@
   '';
 
   virtualisation.oci-containers.containers.registry = {
-    image = "docker.io/library/registry@sha256:38907510915c3f1604c7e83d6ab602ab3020d092f73bdaed8696773693ff768c"; # 3.1.2, :3 as of 2026-11-07
+    image = "docker.io/library/registry@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c"; # 3.1.2, :3 as of 2026-11-18
     autoStart = true;
     user = "${toString config.users.users.registry.uid}:${toString config.users.groups.registry.gid}";
     # docs/adr/0014-containers-run-unprivileged.md
