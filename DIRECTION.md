@@ -141,6 +141,10 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   2026-11-15, about podium). podium follows now (cue issue
   01a1de25-caef); cue and fyr follow when the owner says so. The side bar
   is a candidate for a shared component in dev/design-system.
+- Sign-in goes through Pocket ID, the site's own OIDC provider, and no
+  longer depends on Tailscale's identity: apps that speak OIDC sign in
+  themselves, the rest go through the proxy's login gate (owner, question
+  01a1f005-df03, 2026-11-18; ADR-0018).
 - Go services that sign users in through OIDC (tsidp, ADR-0006) use
   dev/oidc ("Start work on a generic oidc client module that fyr, cue and
   podium can use in the future, for now just vaka should use it", owner,
