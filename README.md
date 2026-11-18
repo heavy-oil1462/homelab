@@ -423,7 +423,11 @@ your config repo.
 This repo doubles as a Claude Code plugin shipping read-only observability
 skills for the stack it deploys: host health from node_exporter
 (host-metrics), journal logs from Loki (service-logs), and Home Assistant
-entity state from the Prometheus exporter (ha-state). Install per project:
+entity state from the Prometheus exporter (ha-state). image-updates reports
+the pinned container images whose tag has moved, asking the registries
+directly, and its separate `image_bump.py` rewrites those pins for a
+reviewed bump (docs/adr/0016-image-updates-as-reviewed-bumps.md). Install
+per project:
 
 ```
 claude plugin marketplace add heavy-oil1462/homelab

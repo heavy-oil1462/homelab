@@ -17,11 +17,13 @@ skills/                 one directory per skill (thin entry points)
   ha-state/             inspect HA entity state
   host-metrics/         node_exporter host health
   service-logs/         journal logs from Loki
+  image-updates/        pinned images whose tag has moved; image_bump writes
 lib/homelab/            shared, reusable backend code (not entry points)
   config.py             endpoint resolution (env, endpoints file), no secrets
   prometheus.py         read-only Prometheus HTTP client
   loki.py               read-only Loki HTTP client
   ha.py, nodeexporter.py, logs.py
+  images.py             image pins and the OCI registry API
 ```
 
 ## Conventions
@@ -38,6 +40,8 @@ lib/homelab/            shared, reusable backend code (not entry points)
   `~/.claude/homelab-endpoints.json`. Tokens stay server-side.
 - Standard library only, so scripts run without a pip install.
 - Each script supports `--help` and a `--json` output mode.
+- Tests live in `tests/test_*.py`, run by the `skills` flake check with
+  `python3 -m unittest`; they reach no service but fakes on 127.0.0.1.
 
 ## Planned
 
