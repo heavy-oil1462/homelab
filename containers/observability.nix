@@ -4,15 +4,31 @@ let
   cfg = config.homelab.observability;
   proxyAddress = config.homelab.reverseProxy.address;
   oidc = cfg.grafanaOidc;
+  pocketId = config.homelab.pocketId;
+  onPocketId = oidc.provider == "pocket-id";
 
   # The forms of the admins' logins in tsidp's email claim: the login, and
   # for GitHub and passkey logins the login with tsidp's host name appended
-  # (realishEmail in tsidp's server/server.go, 0.0.12).
+  # (realishEmail in tsidp's server/server.go, 0.0.12). Pocket ID's email
+  # claim is the account's email as it is.
   issuerHost = builtins.head (lib.splitString "/" (lib.removePrefix "https://" oidc.issuer));
-  oidcAdminEmails = lib.concatMap (login:
+  oidcAdminEmails = if onPocketId then oidc.admins else lib.concatMap (login:
     [ login ] ++ lib.optional (lib.hasSuffix "@github" login || lib.hasSuffix "@passkey" login)
       "${login}.${issuerHost}"
   ) oidc.admins;
+  # The endpoints, as each provider's discovery document has them (tsidp
+  # 0.0.12, Pocket ID 2.7.0).
+  oidcEndpoints = if onPocketId then {
+    auth = "${oidc.issuer}/authorize";
+    token = "${oidc.issuer}/api/oidc/token";
+    userinfo = "${oidc.issuer}/api/oidc/userinfo";
+  } else {
+    auth = "${oidc.issuer}/authorize";
+    token = "${oidc.issuer}/token";
+    userinfo = "${oidc.issuer}/userinfo";
+  };
+  # The provider's unit that writes the client's files before Grafana.
+  oidcProviderUnit = if onPocketId then "pocket-id-clients.service" else "tsidp.service";
   # JMESPath over the token's and userinfo's claims. Anyone else gets no
   # role, which role_attribute_strict turns into a refused sign in.
   oidcRolePath = "contains([${lib.concatMapStringsSep ", " (e: "'${e}'") oidcAdminEmails}], email) && 'Admin'";
@@ -179,7 +195,27 @@ in
       assertion = !(cfg.grafanaProxyAuth.enable && oidc.enable);
       message = "homelab.observability.grafanaProxyAuth and homelab.observability.grafanaOidc are both enabled; Grafana signs in with one or the other.";
     }
-  ];
+  ] ++ lib.optionals oidc.enable (
+    if onPocketId then [
+      {
+        assertion = pocketId.enable;
+        message = "homelab.observability.grafanaOidc.provider is pocket-id, but homelab.pocketId is not enabled on this host.";
+      }
+      {
+        assertion = oidc.issuer == pocketId.url;
+        message = "homelab.observability.grafanaOidc.issuer is ${toString oidc.issuer}, but with Pocket ID it is ${pocketId.url}; leave it unset.";
+      }
+      {
+        assertion = lib.any (c: c.idFile == oidc.clientIdFile && c.secretFile == oidc.clientSecretFile
+          && c.owner == "grafana" && lib.elem "podman-grafana.service" c.units) (lib.attrValues pocketId.clients);
+        message = "homelab.observability.grafanaOidc.provider is pocket-id: declare Grafana's client in homelab.pocketId.clients, with idFile ${oidc.clientIdFile}, secretFile ${oidc.clientSecretFile}, owner grafana and podman-grafana.service among its units (docs/pocket-id.md).";
+      }
+    ] else [
+      {
+        assertion = oidc.issuer != null;
+        message = "homelab.observability.grafanaOidc.provider is tsidp, which needs homelab.observability.grafanaOidc.issuer.";
+      }
+    ]);
 
   # Static uids so the containers' user option has a value at eval time.
   # See "Static user ids" in the README for the allocation. Without one the
@@ -237,11 +273,12 @@ in
     "f ${oidc.clientSecretFile} 0400 grafana grafana -"
   ];
 
-  # With tsidp on this host and Grafana's client declared in
-  # homelab.tsidp.clients, tsidp writes the id and secret before it starts
-  # (docs/adr/0010-tsidp-clients-declared-in-nix.md); Grafana reads them
-  # only when it starts.
-  systemd.services.podman-grafana.after = lib.mkIf oidc.enable [ "tsidp.service" ];
+  # Grafana reads the client's id and secret only when it starts. With tsidp
+  # on this host and Grafana's client declared in homelab.tsidp.clients,
+  # tsidp writes them before it starts
+  # (docs/adr/0010-tsidp-clients-declared-in-nix.md); with Pocket ID,
+  # pocket-id-clients writes them and restarts Grafana when they change.
+  systemd.services.podman-grafana.after = lib.mkIf oidc.enable [ oidcProviderUnit ];
 
   # Create or update the Git Sync repository in Grafana, through its API on
   # the container's address, whenever the config or a token changed and at
@@ -353,22 +390,24 @@ in
         "${oidc.clientSecretFile}:/run/secrets/oidc-client-secret:ro"
       ];
       environment = (if oidc.enable then {
-        # Sign in through the OpenID Connect provider, usually tsidp
-        # (docs/adr/0006-tsidp-for-oidc-sign-in.md). The redirect URI is
-        # built from the root URL. The image's entrypoint reads the
+        # Sign in through the OpenID Connect provider, tsidp
+        # (docs/adr/0006-tsidp-for-oidc-sign-in.md) or Pocket ID
+        # (docs/adr/0018-pocket-id-is-the-oidc-provider.md). The redirect
+        # URI is built from the root URL. The image's entrypoint reads the
         # __FILE variables' files into the settings.
         GF_SERVER_ROOT_URL = "https://status.${config.homelab.domain}/";
         GF_AUTH_GENERIC_OAUTH_ENABLED = "true";
-        GF_AUTH_GENERIC_OAUTH_NAME = "Tailscale";
+        GF_AUTH_GENERIC_OAUTH_NAME = if onPocketId then "Pocket ID" else "Tailscale";
         GF_AUTH_GENERIC_OAUTH_CLIENT_ID__FILE = "/run/secrets/oidc-client-id";
         GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET__FILE = "/run/secrets/oidc-client-secret";
         GF_AUTH_GENERIC_OAUTH_SCOPES = "openid email profile";
-        GF_AUTH_GENERIC_OAUTH_AUTH_URL = "${oidc.issuer}/authorize";
-        GF_AUTH_GENERIC_OAUTH_TOKEN_URL = "${oidc.issuer}/token";
-        GF_AUTH_GENERIC_OAUTH_API_URL = "${oidc.issuer}/userinfo";
+        GF_AUTH_GENERIC_OAUTH_AUTH_URL = oidcEndpoints.auth;
+        GF_AUTH_GENERIC_OAUTH_TOKEN_URL = oidcEndpoints.token;
+        GF_AUTH_GENERIC_OAUTH_API_URL = oidcEndpoints.userinfo;
         GF_AUTH_GENERIC_OAUTH_USE_PKCE = "true";
-        # Users are the tailnet login (tsidp's email claim), not its local
-        # part, which two logins can share.
+        # Users are the email claim: with tsidp the tailnet login, not its
+        # local part, which two logins can share; with Pocket ID the
+        # account's email, unique there.
         GF_AUTH_GENERIC_OAUTH_LOGIN_ATTRIBUTE_PATH = "email";
         GF_AUTH_GENERIC_OAUTH_EMAIL_ATTRIBUTE_PATH = "email";
         GF_AUTH_GENERIC_OAUTH_NAME_ATTRIBUTE_PATH = "name";
@@ -377,6 +416,13 @@ in
         GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_STRICT = "true";
         GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP = "true";
         GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN = "true";
+        # Grafana finds a generic OAuth user by the provider's user id, and
+        # by email only with this. Pocket ID's ids are not tsidp's, so
+        # after a switch an existing user with the same email is taken
+        # over, keeping its preferences and stars, instead of a second user
+        # being made. Only the admins sign in at all, by the same claim
+        # (docs/adr/0019-forgejo-and-grafana-on-pocket-id.md).
+        GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP = lib.boolToString onPocketId;
         # As with proxy authentication: no anonymous access, no password
         # login and no basic auth. Service account tokens keep working.
         GF_AUTH_ANONYMOUS_ENABLED = "false";

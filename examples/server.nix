@@ -74,19 +74,19 @@
     # Forgejo and Grafana sign in through tsidp, at
     # https://idp.<tailnet>.ts.net, which joins the tailnet with the auth
     # key in /var/lib/secrets/tsidp.env. Turning on a service's OIDC below
-    # declares its client here, and tsidp writes the client's id and a
-    # generated secret to the files the service reads.
+    # with the provider tsidp declares its client here, and tsidp writes the
+    # client's id and a generated secret to the files the service reads.
     tsidp = {
       enable = true;
       clients = lib.mkMerge [
-        (lib.mkIf config.homelab.forgejo.oidc.enable {
+        (lib.mkIf (config.homelab.forgejo.oidc.enable && config.homelab.forgejo.oidc.provider == "tsidp") {
           forgejo = {
             redirectUris = [ "https://git.${config.homelab.domain}/user/oauth2/tailscale/callback" ];
             idFile = config.homelab.forgejo.oidc.clientIdFile;
             secretFile = config.homelab.forgejo.oidc.clientSecretFile;
           };
         })
-        (lib.mkIf config.homelab.observability.grafanaOidc.enable {
+        (lib.mkIf (config.homelab.observability.grafanaOidc.enable && config.homelab.observability.grafanaOidc.provider == "tsidp") {
           grafana = {
             redirectUris = [ "https://status.${config.homelab.domain}/login/generic_oauth" ];
             idFile = config.homelab.observability.grafanaOidc.clientIdFile;
@@ -100,18 +100,36 @@
 
     # Pocket ID at https://id.home.example.com, the site's OpenID Connect
     # provider, which replaces tsidp
-    # (docs/adr/0018-pocket-id-is-the-oidc-provider.md). A service moving
-    # to it declares its client here, as
-    #   clients.grafana = {
-    #     redirectUris = [ "https://status.${config.homelab.domain}/login/generic_oauth" ];
-    #     owner = "grafana";
-    #     units = [ "podman-grafana.service" ];
-    #   };
-    # and pocket-id-clients writes the client's id and secret files.
-    # Only alice's tailnet login reaches its first-admin setup.
+    # (docs/adr/0018-pocket-id-is-the-oidc-provider.md). A service whose
+    # OIDC provider below is pocket-id declares its client here, and
+    # pocket-id-clients writes the client's id and secret files and
+    # restarts the units that read them (server-pocket-id.nix switches
+    # both). Only alice's tailnet login reaches its first-admin setup.
     pocketId = {
       enable = true;
       setupLogins = [ "alice@github" ];
+      clients = lib.mkMerge [
+        (lib.mkIf (config.homelab.forgejo.oidc.enable && config.homelab.forgejo.oidc.provider == "pocket-id") {
+          forgejo = {
+            displayName = "Forgejo";
+            redirectUris = [ "https://git.${config.homelab.domain}/user/oauth2/pocket-id/callback" ];
+            idFile = config.homelab.forgejo.oidc.clientIdFile;
+            secretFile = config.homelab.forgejo.oidc.clientSecretFile;
+            units = [ "forgejo-oidc.service" ];
+          };
+        })
+        (lib.mkIf (config.homelab.observability.grafanaOidc.enable && config.homelab.observability.grafanaOidc.provider == "pocket-id") {
+          grafana = {
+            displayName = "Grafana";
+            redirectUris = [ "https://status.${config.homelab.domain}/login/generic_oauth" ];
+            pkce = true;
+            idFile = config.homelab.observability.grafanaOidc.clientIdFile;
+            secretFile = config.homelab.observability.grafanaOidc.clientSecretFile;
+            owner = "grafana";
+            units = [ "podman-grafana.service" ];
+          };
+        })
+      ];
     };
 
     reverseProxy = {
