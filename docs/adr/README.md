@@ -77,4 +77,4 @@ never reaches the workers.
   in themselves get an OIDC login gate at the proxy (Accepted)
 - [ADR-0021](0021-pocket-id-clients-on-the-secrets-api.md):
   pocket-id-clients follows Pocket ID's secrets API and is checked
-  against Pocket ID itself (Proposed)
+  against Pocket ID itself (Accepted)

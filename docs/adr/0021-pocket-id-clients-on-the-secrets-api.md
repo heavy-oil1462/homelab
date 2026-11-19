@@ -1,6 +1,6 @@
 # ADR-0021: pocket-id-clients follows Pocket ID's secrets API and is checked against Pocket ID itself
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 
@@ -87,7 +87,7 @@ What Pocket ID does, read in its source and run:
 - Port 1414 is taken on the host's loopback. Another service on it keeps
   Pocket ID from starting.
 - ADR-0018's statements on 2.7.0's API, its "no call sets" a secret and
-  its stand-in check are superseded by this record once accepted.
+  its stand-in check are superseded by this record.
 
 Related: [ADR-0018](0018-pocket-id-is-the-oidc-provider.md),
 [ADR-0020](0020-oidc-login-gate-at-the-proxy.md).
