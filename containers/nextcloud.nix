@@ -12,6 +12,16 @@
 # updates the containers it manages, but only when the owner asks it to, so
 # nothing upgrades on its own. Major AIO upgrades migrate data: ask the owner
 # before bumping across one.
+#
+# image-updates follows :latest because AIO publishes no version tags to
+# follow instead. Its registries (tag lists of docker.io/nextcloud/all-in-one
+# and ghcr.io/nextcloud-releases/all-in-one, checked 2026-11-19) carry only
+# the channels latest, beta and develop, plus a date tag per build
+# (20261119_161514). A date tag names no major and never moves, so following
+# one would hide every new build. AIO's readme ("How to switch the channel",
+# "How to update the containers") runs the mastercontainer from :latest or
+# :beta and moves the Nextcloud major itself, so a major upgrade has to be
+# spotted in the release notes of the bump.
 let
   cfg = config.homelab.nextcloud;
 in
