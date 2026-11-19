@@ -8,6 +8,10 @@ let
   # Caddyfile snippets built from them.
   tailnetLogin = lib.types.strMatching "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+";
 
+  # A Pocket ID user name, by Pocket ID's own rule (validateUsernameRegex).
+  # It has no comma, so the OIDC gate's snippets can list names in a query.
+  pocketIdUsernameRegex = "[a-zA-Z0-9]([a-zA-Z0-9_.@-]*[a-zA-Z0-9])?";
+
   # A service's sign in through an OpenID Connect provider: tsidp
   # (docs/adr/0006-tsidp-for-oidc-sign-in.md) or Pocket ID
   # (docs/adr/0018-pocket-id-is-the-oidc-provider.md). The client id and
@@ -412,6 +416,105 @@ in
           hands out in order. Null lets podman pick one, which the proxy
           authentication options refuse.
         '';
+      };
+      oidcGate = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            A sign-in gate in front of sites that cannot sign anyone in
+            themselves (docs/adr/0020-oidc-login-gate-at-the-proxy.md).
+            Runs nixpkgs' oauth2-proxy on a unix socket that only the caddy
+            container mounts. A site that imports the generated snippet
+            oidc_gate or oidc_owner_only is reached only after signing in
+            at the OpenID Connect provider, and gets the user's name as
+            Remote-User. Declare its client in homelab.pocketId.clients
+            (see examples/server.nix).
+          '';
+        };
+        issuer = lib.mkOption {
+          type = lib.types.strMatching "https://[^/]+(/.*[^/])?";
+          default = cfg.pocketId.url;
+          defaultText = lib.literalExpression "homelab.pocketId.url";
+          description = ''
+            The provider's issuer URL, without a trailing slash. Users are
+            told apart by its preferred_username claim, which Pocket ID
+            fills with the user name.
+          '';
+        };
+        clientId = lib.mkOption {
+          type = lib.types.strMatching "[A-Za-z0-9._-]{2,128}";
+          default = "oidc-gate";
+          description = ''
+            The gate's client id at the provider: the key of its entry in
+            homelab.pocketId.clients.
+          '';
+        };
+        clientSecretFile = lib.mkOption {
+          type = lib.types.str;
+          default = "/var/lib/secrets/oidc-gate-oidc-client-secret";
+          description = ''
+            File holding the client secret, readable by root; systemd hands
+            it to oauth2-proxy as a credential. Pocket ID's default
+            secretFile for a client named oidc-gate.
+          '';
+        };
+        cookieSecretFile = lib.mkOption {
+          type = lib.types.str;
+          default = "/var/lib/secrets/oidc-gate-cookie-secret";
+          description = ''
+            The key the session cookie is encrypted and signed with, owned
+            by root, mode 0400. Generated on the first start when missing;
+            replacing it signs everyone out.
+          '';
+        };
+        cookieDomain = lib.mkOption {
+          type = lib.types.str;
+          default = ".${cfg.domain}";
+          defaultText = lib.literalExpression ''".''${homelab.domain}"'';
+          description = ''
+            Domain of the session cookie. Under the default one sign-in
+            covers every gated site of homelab.domain, and signing out of
+            one signs out of all.
+          '';
+        };
+        sessionLifetime = lib.mkOption {
+          type = lib.types.strMatching "[0-9]+(h|m)";
+          default = "24h";
+          description = ''
+            How long a sign-in lasts, in hours or minutes, after which the
+            browser goes through the provider again. Within it the session
+            is renewed with the provider every 30 minutes, so a user
+            disabled or deleted there is out within half an hour.
+          '';
+        };
+        owners = lib.mkOption {
+          type = lib.types.nonEmptyListOf (lib.types.strMatching pocketIdUsernameRegex);
+          example = [ "alice" ];
+          description = ''
+            Provider user names (Pocket ID's username) let through
+            oidc_owner_only, and through oidc_gate.
+          '';
+        };
+        users = lib.mkOption {
+          type = lib.types.listOf (lib.types.strMatching pocketIdUsernameRegex);
+          default = [ ];
+          example = [ "bob" ];
+          description = ''
+            Further user names let through oidc_gate, besides
+            homelab.reverseProxy.oidcGate.owners.
+          '';
+        };
+        socket = lib.mkOption {
+          type = lib.types.str;
+          default = "/run/oidc-gate/oauth2-proxy.sock";
+          readOnly = true;
+          description = ''
+            The unix socket oauth2-proxy serves on. Its directory is
+            mounted into the caddy container, and the generated snippets
+            dial it.
+          '';
+        };
       };
     };
 

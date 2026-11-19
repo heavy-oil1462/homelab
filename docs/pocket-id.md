@@ -80,7 +80,7 @@ own. Apps match accounts on the username and email, so this keeps a user
 from taking an address no account holds
 ([ADR-0019](adr/0019-forgejo-and-grafana-on-pocket-id.md)).
 `homelab.pocketId.allowOwnAccountEdit` allows it again, but Grafana on
-Pocket ID then does not build.
+Pocket ID and the proxy's login gate then do not build.
 
 Pocket ID's application settings come from the host's config
 (`UI_CONFIG_DISABLED`); its admin UI shows them read-only. Set one by its
@@ -145,6 +145,11 @@ The apps match the owner's existing account like this
   cannot change their own email in Pocket ID.
 - cue, fyr, podium and vaka sign in through dev/oidc; which claim each
   matches on is set when it moves to Pocket ID.
+- The proxy's login gate (`homelab.reverseProxy.oidcGate`) matches the
+  username: the names in its `owners` and `users` are Pocket ID
+  usernames, and the site behind it gets the username as `Remote-User`.
+  Its client is declared like any other, as `examples/server.nix` does
+  (docs/adr/0020-oidc-login-gate-at-the-proxy.md).
 
 ## Moving Forgejo and Grafana to Pocket ID
 

@@ -300,6 +300,34 @@
         '';
         # The example Caddyfile's tailnet_identity snippet in a real Caddy.
         tailnet-identity = pkgs.callPackage ./tests/tailnet-identity.nix { };
+        # The example server's OIDC login gate as evaluated, and the
+        # configurations it refuses.
+        oidc-gate-module =
+          let
+            without = module: (exampleServer.extendModules { modules = [ module ]; }).config;
+          in
+          pkgs.callPackage ./tests/oidc-gate-module.nix {
+            config = exampleServer.config;
+            withoutGate = without { homelab.reverseProxy.oidcGate.enable = nixpkgs.lib.mkForce false; };
+            withoutClient = without { homelab.pocketId.clients = nixpkgs.lib.mkForce { }; };
+            ownAccountEdit = without { homelab.pocketId.allowOwnAccountEdit = true; };
+            shortSession = without { homelab.reverseProxy.oidcGate.sessionLifetime = "30m"; };
+          };
+        # The OIDC login gate in a real Caddy and oauth2-proxy, against a
+        # stand-in for Pocket ID, with oidc_gate opened to bob as well.
+        oidc-gate =
+          let
+            cfg = (exampleServer.extendModules {
+              modules = [{ homelab.reverseProxy.oidcGate.users = [ "bob" ]; }];
+            }).config;
+          in
+          pkgs.callPackage ./tests/oidc-gate.nix {
+            caddyfile = nixpkgs.lib.removeSuffix ":/etc/caddy/Caddyfile"
+              (builtins.head cfg.virtualisation.oci-containers.containers.caddy.volumes);
+            command = cfg.systemd.services.oauth2-proxy.serviceConfig.ExecStart;
+            cookieSecret = cfg.systemd.services.oidc-gate-cookie-secret.serviceConfig.ExecStart;
+            clientId = cfg.homelab.reverseProxy.oidcGate.clientId;
+          };
         # The identity snippets the reverse proxy generates for the example
         # server on proxy authentication, in a real Caddy. The Caddyfile is the store path the caddy
         # container mounts; removeSuffix keeps its string context.

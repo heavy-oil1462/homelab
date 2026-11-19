@@ -129,6 +129,18 @@
             units = [ "podman-grafana.service" ];
           };
         })
+        {
+          # The OIDC gate's client, below. Its callback is /oauth2/callback
+          # on whichever gated site the sign-in started from. Systemd hands
+          # the secret to oauth2-proxy, so the files stay root's.
+          ${config.homelab.reverseProxy.oidcGate.clientId} = {
+            displayName = "Sites behind the proxy";
+            redirectUris = [ "https://*.${config.homelab.domain}/oauth2/callback" ];
+            pkce = true;
+            secretFile = config.homelab.reverseProxy.oidcGate.clientSecretFile;
+            units = [ "oauth2-proxy.service" ];
+          };
+        }
       ];
     };
 
@@ -136,6 +148,14 @@
       caddyfile = ./assets/caddy/Caddyfile;
       notFoundPage = ./assets/caddy/404.html;
       tailscaleIdentity.enable = true;
+      # A login gate for sites that cannot sign anyone in themselves: the
+      # camera's own pages in the example Caddyfile import oidc_owner_only,
+      # so only alice, signed in at Pocket ID, reaches them
+      # (docs/adr/0020-oidc-login-gate-at-the-proxy.md).
+      oidcGate = {
+        enable = true;
+        owners = [ "alice" ];
+      };
     };
     observability = {
       prometheusConfig = ./assets/prometheus.yml;
