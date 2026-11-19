@@ -31,7 +31,7 @@ in
 
   virtualisation.oci-containers.containers = {
     nextcloud-aio-mastercontainer = {
-      image = "docker.io/nextcloud/all-in-one@sha256:c1da0c8c5ee2378c971f5f61a956dfa826f9230bb1d1022a4e4346dd27bf543e"; # :latest (built 2026-11-03, revision 97ef10c) as of 2026-11-12
+      image = "docker.io/nextcloud/all-in-one@sha256:b81a56854642cf2e991feae6dee652fe4837e2c2c4d51d6d167e38d5cfb6d6b5"; # :latest (built 2026-11-19, revision 6d3b1ab) as of 2026-11-19
       autoStart = true;
       ports = [
         "${toString cfg.bindAddress}:8080:8080" # AIO Mastercontainer Interface
