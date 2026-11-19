@@ -22,6 +22,13 @@
 # "How to update the containers") runs the mastercontainer from :latest or
 # :beta and moves the Nextcloud major itself, so a major upgrade has to be
 # spotted in the release notes of the bump.
+#
+# The pin is on ghcr.io, the registry AIO's readme names; Docker Hub carries
+# the same builds. AIO takes no setting for its own image name: it reads the
+# mastercontainer's image reference from the container API and splits it at
+# ':' into a name and a channel, which it uses for its own update check and
+# as the tag of the containers it starts (GetCurrentImageName and
+# GetCurrentChannel in php/src/Docker/DockerActionManager.php).
 let
   cfg = config.homelab.nextcloud;
 in
@@ -41,7 +48,7 @@ in
 
   virtualisation.oci-containers.containers = {
     nextcloud-aio-mastercontainer = {
-      image = "docker.io/nextcloud/all-in-one@sha256:b81a56854642cf2e991feae6dee652fe4837e2c2c4d51d6d167e38d5cfb6d6b5"; # :latest (built 2026-11-19, revision 6d3b1ab) as of 2026-11-19
+      image = "ghcr.io/nextcloud-releases/all-in-one@sha256:b81a56854642cf2e991feae6dee652fe4837e2c2c4d51d6d167e38d5cfb6d6b5"; # :latest (built 2026-11-19, revision 6d3b1ab) as of 2026-11-19
       autoStart = true;
       ports = [
         "${toString cfg.bindAddress}:8080:8080" # AIO Mastercontainer Interface
