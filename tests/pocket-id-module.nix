@@ -1,5 +1,6 @@
 # The example server's Pocket ID, with the clients forgejo and grafana
-# declared by the flake (docs/adr/0018-pocket-id-is-the-oidc-provider.md).
+# declared by the flake and the OIDC gate's declared by the example
+# (docs/adr/0018-pocket-id-is-the-oidc-provider.md).
 # Pure evaluation of the host config, then a build that reads only the
 # spec file the pocket-id-clients unit names:
 #
@@ -26,7 +27,7 @@ let
   clients = config.systemd.services.pocket-id-clients;
   caddy = config.virtualisation.oci-containers.containers.caddy;
   backup = config.homelab.backups.jobs.pocket-id or null;
-  units = [ "forgejo-oidc.service" "podman-grafana.service" ];
+  units = [ "forgejo-oidc.service" "podman-grafana.service" "oauth2-proxy.service" ];
 
   problems =
     lib.optional (!cfg.enable) "homelab.pocketId.enable is off"
@@ -78,6 +79,17 @@ let
       secretFile = "/var/lib/secrets/grafana-oidc-client-secret";
       owner = "grafana:grafana";
       units = [ "podman-grafana.service" ];
+    }
+    {
+      id = "oidc-gate";
+      displayName = "Sites behind the proxy";
+      redirectUris = [ "https://*.home.example.com/oauth2/callback" ];
+      logoutRedirectUris = [ ];
+      pkce = true;
+      idFile = "/var/lib/secrets/oidc-gate-oidc-client-id";
+      secretFile = "/var/lib/secrets/oidc-gate-oidc-client-secret";
+      owner = "root:root";
+      units = [ "oauth2-proxy.service" ];
     }
   ];
 in

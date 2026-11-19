@@ -1,5 +1,6 @@
-# Shared by tests/tailnet-identity.nix and tests/identity-mapping.nix:
-# starts the stand-in for nginx-auth and Caddy, and stops both on failure.
+# Shared by tests/tailnet-identity.nix, tests/identity-mapping.nix and
+# tests/oidc-gate.nix: starts the stand-in for nginx-auth and Caddy, and
+# stops both, and whatever else a test adds to pids, on failure.
 #
 # Nothing here may outlive or stall the build. Outside the build sandbox,
 # as in CI, Nix waits until every process holding the build's output has
@@ -24,7 +25,7 @@ stop() {
 
 fail() {
   echo "FAIL: $*" >&2
-  for log in auth.log caddy.log; do
+  for log in *.log; do
     [ ! -s "$log" ] || { echo "--- $log" >&2; cat "$log" >&2; }
   done
   stop

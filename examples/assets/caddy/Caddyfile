@@ -96,6 +96,19 @@ logs.__DOMAIN__:443 {
 	reverse_proxy loki:3100
 }
 
+# A camera's own admin pages, which have no sign-in worth the name, on the
+# LAN. oidc_owner_only, generated from homelab.reverseProxy.oidcGate,
+# sends anyone without a session to sign in at Pocket ID and lets only the
+# owners through; oidc_gate lets homelab.reverseProxy.oidcGate.users in
+# too. Either passes the user name on as Remote-User, and routes /oauth2/
+# to oauth2-proxy: /oauth2/sign_out signs out of every gated site. Import
+# it at the top of the site block, and not together with tailnet_identity.
+cam-door.__DOMAIN__:443 {
+	import site_tls
+	import oidc_owner_only
+	reverse_proxy 192.0.2.20:80
+}
+
 # Echoes the identity Caddy passes on, to test tailnet_identity by hand.
 whoami.__DOMAIN__:443 {
 	import site_tls
