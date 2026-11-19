@@ -75,6 +75,13 @@ in
         TRUST_PROXY = true;
         ANALYTICS_DISABLED = true;
         VERSION_CHECK_DISABLED = true;
+        # The application settings come from here, not the admin UI, so
+        # whether users edit their own accounts is the config's
+        # (docs/adr/0019-forgejo-and-grafana-on-pocket-id.md). The others
+        # keep Pocket ID's defaults unless set here too: sign ups stay
+        # disabled.
+        UI_CONFIG_DISABLED = true;
+        ALLOW_OWN_ACCOUNT_EDIT = cfg.allowOwnAccountEdit;
       };
       # Read by systemd as root (LoadCredential), so the files stay root's.
       credentials = {

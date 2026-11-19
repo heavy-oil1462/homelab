@@ -53,23 +53,32 @@
 # created on first sign in; create them as the admin.
 #
 # With homelab.forgejo.oidc.enable instead, the web UI signs in through an
-# OpenID Connect provider, usually tsidp
-# (docs/adr/0006-tsidp-for-oidc-sign-in.md), and the git site stays as at
-# the top. The forgejo-oidc unit adds the provider as the sign in source
-# "tailscale" and keeps it in step with the config. It reads the client's
-# id and secret from two files, owned by root, mode 0400:
+# OpenID Connect provider, tsidp (docs/adr/0006-tsidp-for-oidc-sign-in.md)
+# or Pocket ID (docs/adr/0018-pocket-id-is-the-oidc-provider.md), as
+# homelab.forgejo.oidc.provider says, and the git site stays as at the top.
+# The forgejo-oidc unit adds the provider as a sign in source, "tailscale"
+# for tsidp and "pocket-id" for Pocket ID, and keeps it in step with the
+# config; switching providers updates and renames the one source in place.
+# It reads the client's id and secret from two files, owned by root, mode
+# 0400:
 #
 #   /var/lib/secrets/forgejo-oidc-client-id
 #   /var/lib/secrets/forgejo-oidc-client-secret
 #
-# With tsidp on the same host, declare the client in homelab.tsidp.clients
-# with the redirect URI https://git.<domain>/user/oauth2/tailscale/callback
-# and tsidp writes both files (docs/adr/0010-tsidp-clients-declared-in-nix.md).
-# Otherwise register it at the provider and put its id and secret there.
+# Declare the client in homelab.pocketId.clients, with the redirect URI
+# https://git.<domain>/user/oauth2/pocket-id/callback and forgejo-oidc.service
+# among its units, and Pocket ID writes both files. With tsidp on the same
+# host, declare it in homelab.tsidp.clients with the redirect URI
+# https://git.<domain>/user/oauth2/tailscale/callback and tsidp writes them
+# (docs/adr/0010-tsidp-clients-declared-in-nix.md). Otherwise register it at
+# the provider and put its id and secret there.
 #
 # A new user's first sign in creates their account, named after the part of
-# their tailnet login before the @. If that name is taken, Forgejo asks them
-# to sign in to the existing account with its password to link the two.
+# their tailnet login before the @ with tsidp, or after their Pocket ID
+# username. If that name or their email is taken, Forgejo asks them to sign
+# in to the existing account with its password to link the two; the
+# provider's user id differs between providers, so after a switch every
+# existing user links once (docs/adr/0019-forgejo-and-grafana-on-pocket-id.md).
 # Turning the option off leaves the source in Forgejo; delete it as the
 # admin.
 #
@@ -94,8 +103,20 @@ let
   admin = cfg.admin;
   proxyAuth = cfg.proxyAuth.enable;
   oidc = cfg.oidc;
-  # The source's name, in the callback URL the provider must allow.
-  oidcSource = "tailscale";
+  pocketId = config.homelab.pocketId;
+  # The source's name per provider, in the callback URL the provider must
+  # allow. The unit renames a source of another provider's name in place.
+  oidcSources = {
+    tsidp = "tailscale";
+    pocket-id = "pocket-id";
+  };
+  oidcSource = oidcSources.${oidc.provider};
+  oidcFormerSources = lib.attrValues (removeAttrs oidcSources [ oidc.provider ]);
+  # The provider's unit that writes the client's files before forgejo-oidc.
+  oidcProviderUnit = {
+    tsidp = "tsidp.service";
+    pocket-id = "pocket-id-clients.service";
+  }.${oidc.provider};
   # The host directory for the HTTP socket with proxy authentication on,
   # mounted at the same path in the forgejo and caddy containers.
   httpSocketDir = "/run/forgejo-http";
@@ -142,7 +163,27 @@ in
       assertion = !(proxyAuth && oidc.enable);
       message = "homelab.forgejo.proxyAuth and homelab.forgejo.oidc are both enabled; Forgejo signs in with one or the other.";
     }
-  ];
+  ] ++ lib.optionals oidc.enable (
+    if oidc.provider == "pocket-id" then [
+      {
+        assertion = pocketId.enable;
+        message = "homelab.forgejo.oidc.provider is pocket-id, but homelab.pocketId is not enabled on this host.";
+      }
+      {
+        assertion = oidc.issuer == pocketId.url;
+        message = "homelab.forgejo.oidc.issuer is ${toString oidc.issuer}, but with Pocket ID it is ${pocketId.url}; leave it unset.";
+      }
+      {
+        assertion = lib.any (c: c.idFile == oidc.clientIdFile && c.secretFile == oidc.clientSecretFile
+          && lib.elem "forgejo-oidc.service" c.units) (lib.attrValues pocketId.clients);
+        message = "homelab.forgejo.oidc.provider is pocket-id: declare Forgejo's client in homelab.pocketId.clients, with idFile ${oidc.clientIdFile}, secretFile ${oidc.clientSecretFile} and forgejo-oidc.service among its units (docs/pocket-id.md).";
+      }
+    ] else [
+      {
+        assertion = oidc.issuer != null;
+        message = "homelab.forgejo.oidc.provider is tsidp, which needs homelab.forgejo.oidc.issuer.";
+      }
+    ]);
 
   # The f rule creates an empty file if none exists, so podman never makes a
   # directory at the mount's source; it does not touch an existing file.
@@ -221,10 +262,15 @@ in
     } // lib.optionalAttrs oidc.enable {
       # Registration stays closed for the sign up form; sign in through the
       # provider creates accounts regardless. tsidp's email claim is the
-      # tailnet login, so new users are named after its local part. An
+      # tailnet login, so new users are named after its local part; Pocket
+      # ID's preferred_username is the account's username, unique there. An
       # existing account with that name or email is linked only after its
-      # password is given, since users can add email addresses themselves.
-      FORGEJO__oauth2_client__USERNAME = "email";
+      # password is given: users can add email addresses to their Forgejo
+      # accounts, and a name or email that no Pocket ID account holds may
+      # still be given to a new one, or taken by a user editing their own
+      # (homelab.pocketId.allowOwnAccountEdit).
+      FORGEJO__oauth2_client__USERNAME =
+        if oidc.provider == "pocket-id" then "preferred_username" else "email";
       FORGEJO__oauth2_client__ACCOUNT_LINKING = "login";
     } // cfg.extraEnvironment;
   };
@@ -266,12 +312,13 @@ in
 
   # Runs on every boot and after a rebuild that changes it, and restarts
   # Forgejo when the source changed or Forgejo started before the provider
-  # answered. Wants rather than requires, as forgejo-admin. After tsidp,
-  # when it runs on this host: it writes the id and secret files of the
-  # clients declared in homelab.tsidp.clients before it starts.
+  # answered. Wants rather than requires, as forgejo-admin. After the unit
+  # that writes the client's id and secret files: tsidp, when it runs on
+  # this host, writes them before it starts; pocket-id-clients writes them
+  # and restarts this unit when they change.
   systemd.services.forgejo-oidc = lib.mkIf oidc.enable {
     description = "Set up Forgejo's OpenID Connect sign in";
-    after = [ "podman-forgejo.service" "network-online.target" "tsidp.service" ];
+    after = [ "podman-forgejo.service" "network-online.target" oidcProviderUnit ];
     wants = [ "podman-forgejo.service" "network-online.target" ];
     wantedBy = [ "multi-user.target" ];
     path = [ config.virtualisation.podman.package config.systemd.package ];
@@ -280,14 +327,14 @@ in
       RemainAfterExit = true;
       StateDirectory = "forgejo-oidc";
       StateDirectoryMode = "0700";
-      ExecStart = utils.escapeSystemdExecArgs [
+      ExecStart = utils.escapeSystemdExecArgs ([
         "${oidcScript}/bin/forgejo-oidc"
         oidcSource
         oidc.issuer
         oidc.clientIdFile
         oidc.clientSecretFile
         "/var/lib/forgejo-oidc/applied"
-      ];
+      ] ++ oidcFormerSources);
     };
   };
 }

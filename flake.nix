@@ -23,6 +23,7 @@
       };
       exampleServer = exampleHost ./examples/server.nix;
       exampleServerProxyAuth = exampleHost ./examples/server-proxy-auth.nix;
+      exampleServerPocketId = exampleHost ./examples/server-pocket-id.nix;
       exampleWorkstation = exampleHost ./examples/workstation.nix;
       exampleVm = nixpkgs.lib.nixosSystem {
         inherit system;
@@ -138,6 +139,8 @@
           (builtins.unsafeDiscardStringContext exampleServer.config.system.build.toplevel.drvPath);
         example-server-proxy-auth = pkgs.writeText "example-server-proxy-auth-drv"
           (builtins.unsafeDiscardStringContext exampleServerProxyAuth.config.system.build.toplevel.drvPath);
+        example-server-pocket-id = pkgs.writeText "example-server-pocket-id-drv"
+          (builtins.unsafeDiscardStringContext exampleServerPocketId.config.system.build.toplevel.drvPath);
         example-workstation = pkgs.writeText "example-workstation-drv"
           (builtins.unsafeDiscardStringContext exampleWorkstation.config.system.build.toplevel.drvPath);
         example-vm = pkgs.writeText "example-vm-drv"
@@ -207,6 +210,32 @@
         # The example's alert rules in promtool: every query parses, and the
         # vulnerability rules alert on what they should.
         alert-rules = pkgs.callPackage ./tests/alert-rules.nix { };
+        # Forgejo's and Grafana's OIDC sign in on tsidp, the example server's,
+        # and on Pocket ID, and the assertions that refuse a half-done switch
+        # or Grafana on a Pocket ID whose users edit their own email.
+        oidc-providers = pkgs.callPackage ./tests/oidc-providers.nix {
+          tsidp = exampleServer.config;
+          pocketId = exampleServerPocketId.config;
+          broken =
+            let
+              with' = host: module: (host.extendModules { modules = [ module ]; }).config;
+            in
+            {
+              noPocketId = with' exampleServerPocketId { homelab.pocketId.enable = nixpkgs.lib.mkForce false; };
+              noClients = with' exampleServerPocketId { homelab.pocketId.clients = nixpkgs.lib.mkForce { }; };
+              ownEdit = with' exampleServerPocketId { homelab.pocketId.allowOwnAccountEdit = true; };
+              ownEditDirect = with' exampleServerPocketId {
+                services.pocket-id.settings.ALLOW_OWN_ACCOUNT_EDIT = nixpkgs.lib.mkForce true;
+              };
+              tsidpIssuer = with' exampleServerPocketId {
+                homelab.forgejo.oidc.issuer = nixpkgs.lib.mkOverride 10 "https://idp.tailnet.invalid";
+              };
+              noIssuer = with' exampleServer {
+                homelab.forgejo.oidc.issuer = nixpkgs.lib.mkForce null;
+                homelab.observability.grafanaOidc.issuer = nixpkgs.lib.mkForce null;
+              };
+            };
+        };
         # The forgejo-oidc unit's script against a stubbed podman and systemctl.
         forgejo-oidc = pkgs.callPackage ./tests/forgejo-oidc.nix { };
         # The script writing tsidp's declared clients, against a fake state

@@ -70,3 +70,6 @@ never reaches the workers.
   scanned for known vulnerabilities (Accepted)
 - [ADR-0018](0018-pocket-id-is-the-oidc-provider.md): Pocket ID is the
   site's OIDC provider (Accepted)
+- [ADR-0019](0019-forgejo-and-grafana-on-pocket-id.md): Forgejo and
+  Grafana choose their OIDC provider, and keep existing users on a switch
+  (Accepted)

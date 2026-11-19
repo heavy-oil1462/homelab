@@ -73,8 +73,20 @@ Pocket ID refuses the setup itself.
    `pocket-id` user, in `/var/lib/pocket-id`, with the unit's environment)
    prints a one-time sign in link.
 
-Other users are added in the admin UI (Users, then a signup link or a new
-user), and register their own passkeys.
+Other users are added in the admin UI (Users, then a new user), and
+register their own passkeys. Users cannot change their own name, username
+or email: the admin does, in Users, for every account including their
+own. Apps match accounts on the username and email, so this keeps a user
+from taking an address no account holds
+([ADR-0019](adr/0019-forgejo-and-grafana-on-pocket-id.md)).
+`homelab.pocketId.allowOwnAccountEdit` allows it again, but Grafana on
+Pocket ID then does not build.
+
+Pocket ID's application settings come from the host's config
+(`UI_CONFIG_DISABLED`); its admin UI shows them read-only. Set one by its
+environment name in `services.pocket-id.settings`, such as
+`ALLOW_USER_SIGNUPS = "withToken";` for sign up links, which let the new
+user choose their own email once.
 
 ## Clients
 
@@ -117,20 +129,111 @@ Pocket ID sends, with the scopes `openid profile email`:
 - `name`, `given_name`, `family_name`;
 - `groups`, with the scope `groups`.
 
-The apps match the owner's existing account like this:
+The apps match the owner's existing account like this
+([ADR-0019](adr/0019-forgejo-and-grafana-on-pocket-id.md)):
 
 - Forgejo, through the `forgejo-oidc` sign in source: new accounts are
-  named after the claim its `USERNAME` setting names, and an existing
-  account of that name or email is linked once its password is given
-  (`ACCOUNT_LINKING=login`). Today `USERNAME` is `email`, the local part
-  of tsidp's email claim; Forgejo's move to Pocket ID makes it the
-  username, so the Pocket ID username is the Forgejo user name.
+  named after the Pocket ID username (`USERNAME=preferred_username`), and
+  an existing account of that name or email is linked once its password
+  is given (`ACCOUNT_LINKING=login`). Linking without the password
+  (`auto`) is left off: Pocket ID users can change their own username and
+  email, and would then be linked to someone else's account.
 - Grafana: the `email` claim is the user's login and email, and the
-  addresses in `homelab.observability.grafanaOidc.admins` get Admin. The
-  owner's Pocket ID email goes in that list; an existing Grafana user with
-  that login keeps its dashboards and preferences.
+  addresses in `homelab.observability.grafanaOidc.admins` get Admin.
+  Grafana looks an existing user up by that email, so a user whose email
+  is the owner's Pocket ID email is kept. Both are safe because users
+  cannot change their own email in Pocket ID.
 - cue, fyr, podium and vaka sign in through dev/oidc; which claim each
   matches on is set when it moves to Pocket ID.
+
+## Moving Forgejo and Grafana to Pocket ID
+
+Each service picks its provider, `tsidp` by default:
+`homelab.forgejo.oidc.provider` and
+`homelab.observability.grafanaOidc.provider`. Switch them one at a time
+or together, once Pocket ID runs and the owner's account exists (above).
+
+1. Make the owner's Pocket ID account match, in Pocket ID's admin UI under
+   Users: its username is the owner's Forgejo user name, and its email is
+   the email of the owner's Grafana user (Grafana, Profile). If the Grafana email is tsidp's form, such as
+   `alice@github.idp.<tailnet>.ts.net`, keep the real address in Pocket
+   ID; Grafana then makes a new user, as below.
+2. Know the password of the owner's Forgejo account. If it is forgotten,
+   or the account was made on a tsidp sign in and has none, set one on
+   the host:
+
+   ```sh
+   podman exec -it forgejo forgejo admin user change-password --username alice --password '<new password>'
+   ```
+
+   Forgejo asks for a new one at the next password sign in.
+3. In the host's config, declare the clients and switch the providers,
+   and remove each service's tsidp `issuer` (it becomes
+   `homelab.pocketId.url`) and its client in `homelab.tsidp.clients`:
+
+   ```nix
+   homelab.pocketId.clients = {
+     forgejo = {
+       displayName = "Forgejo";
+       redirectUris = [ "https://git.${config.homelab.domain}/user/oauth2/pocket-id/callback" ];
+       idFile = config.homelab.forgejo.oidc.clientIdFile;
+       secretFile = config.homelab.forgejo.oidc.clientSecretFile;
+       units = [ "forgejo-oidc.service" ];
+     };
+     grafana = {
+       displayName = "Grafana";
+       redirectUris = [ "https://status.${config.homelab.domain}/login/generic_oauth" ];
+       pkce = true;
+       idFile = config.homelab.observability.grafanaOidc.clientIdFile;
+       secretFile = config.homelab.observability.grafanaOidc.clientSecretFile;
+       owner = "grafana";
+       units = [ "podman-grafana.service" ];
+     };
+   };
+   homelab.forgejo.oidc.provider = "pocket-id";
+   homelab.observability.grafanaOidc = {
+     provider = "pocket-id";
+     # The admins' Pocket ID emails.
+     admins = [ "alice@example.com" ];
+   };
+   ```
+
+   The host does not build if Pocket ID is off, a client is missing, a
+   tsidp issuer is left, or, for Grafana, Pocket ID lets users edit their
+   own accounts. `examples/server.nix` declares the clients from
+   the options this way, and `examples/server-pocket-id.nix` switches
+   both services.
+4. Rebuild. `pocket-id-clients` creates both clients, writes their id and
+   secret files over tsidp's, and restarts `forgejo-oidc` and Grafana.
+   `forgejo-oidc` updates the sign in source `tailscale` in place to
+   Pocket ID's issuer, id and secret, renames it `pocket-id`, and
+   restarts Forgejo.
+
+What the owner sees on the first sign in:
+
+- **Forgejo**: the sign in page has "Sign in with pocket-id" where
+  "tailscale" was. It goes to Pocket ID, which asks for the passkey
+  unless already signed in there, then once asks to allow Forgejo to see
+  the email and profile. Back in Forgejo, Pocket ID's user id is new to
+  it and the name is taken, so Forgejo shows its link account page: sign
+  in there with the Forgejo user name and password (and the second
+  factor, if the account has one). From then on Pocket ID signs straight
+  in. Other users do the same once; an account Forgejo made on a tsidp
+  sign in needs a password set first, as in step 2.
+- **Grafana**: opening Grafana goes straight to Pocket ID (auto login),
+  with the passkey and, once, the consent screen for Grafana. Back in
+  Grafana, the owner is the user with that email, with the Admin role as
+  before. If no user has that email, Grafana makes one, with the Admin
+  role: dashboards, folders, alert rules, data sources and Git Sync
+  belong to the organisation and are all still there; only the old
+  user's own preferences and starred dashboards stay with it. Delete the
+  old user under Administration, Users and access, Users.
+
+Sessions already open in either service keep working until they expire.
+
+Switching back is the same in reverse: set the provider to `tsidp` with
+its issuer and client again. The source is renamed `tailscale`, and the
+links made with tsidp work again.
 
 ## Restoring
 

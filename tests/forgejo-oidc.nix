@@ -1,7 +1,8 @@
 # Runs containers/forgejo-oidc.sh against a stubbed podman and systemctl: a
 # first run, a run with nothing to do, Forgejo that started before the
-# issuer answered, a changed secret, a missing secret and an issuer that
-# does not answer.
+# issuer answered, a changed secret, a switch from tsidp to Pocket ID that
+# updates and renames the source in place, a missing secret and an issuer
+# that does not answer.
 { runCommand, callPackage, runtimeShell }:
 
 let
@@ -13,26 +14,30 @@ runCommand "forgejo-oidc-test" { } ''
   export PATH=$PWD/bin:$PATH STUB=$PWD
   export FORGEJO_OIDC_TRIES=3 FORGEJO_OIDC_WAIT=0
   issuer=https://idp.tailnet.invalid
+  export STUB_ISSUER=$issuer
 
-  # podman answers like the forgejo container. The source exists once added
-  # (the file source), and Forgejo has set it up once restarted after that
-  # (the file registered). Commands go to podman.log, stdin to stdin.
+  # podman answers like the forgejo container. The source exists once added,
+  # under the name in the file source, and Forgejo has set it up for the
+  # issuer in STUB_ISSUER once restarted after that (the file registered).
+  # Commands go to podman.log, stdin to stdin.
   cat > bin/podman <<'STUB'
   #!${runtimeShell}
   echo "$*" >> "$STUB/podman.log"
   case "$*" in
     *"exec -i forgejo sh -c"*)
       cat > "$STUB/stdin"
-      case "$*" in *add-oauth*) touch "$STUB/source" ;; esac
+      # The value after --name.
+      name=$(printf '%s\n' "$@" | sed -n '/^--name$/{n;p;q}')
+      printf '%s\n' "$name" > "$STUB/source"
       ;;
     *healthz*) [ -z "''${STUB_DOWN:-}" ] ;;
     *openid-configuration*) [ -z "''${STUB_NO_ISSUER:-}" ] ;;
     *"admin auth list"*)
       printf 'ID\tName\tType\tEnabled\n'
-      [ ! -e "$STUB/source" ] || printf '1\ttailscale\tOAuth2\ttrue\n'
+      [ ! -e "$STUB/source" ] || printf '1\t%s\tOAuth2\ttrue\n' "$(cat "$STUB/source")"
       ;;
     *redirect_url*)
-      [ ! -e "$STUB/registered" ] || printf 'https://idp.tailnet.invalid/authorize?client_id=x'
+      [ ! -e "$STUB/registered" ] || printf '%s/authorize?client_id=x' "$STUB_ISSUER"
       ;;
     *) exit 64 ;;
   esac
@@ -47,9 +52,12 @@ runCommand "forgejo-oidc-test" { } ''
   fail() { echo "FAIL: $*" >&2; exit 1; }
   echo client-1 > id
   echo s3cret-1 > secret # public-check: fake
+  # The source's name, and the other provider's, as containers/forgejo.nix
+  # passes them.
+  name=tailscale former=pocket-id
   run() {
     : > podman.log; : > systemctl.log
-    ${script}/bin/forgejo-oidc tailscale "$issuer" id secret state > out 2> err
+    ${script}/bin/forgejo-oidc "$name" "$issuer" id secret state "$former" > out 2> err
   }
 
   # First run: adds the source with the id and secret on stdin, records it
@@ -83,12 +91,32 @@ runCommand "forgejo-oidc-test" { } ''
   [ "$(sed -n 2p stdin)" = s3cret-2 ] || fail "new secret: stdin was: $(cat stdin)"
   grep -q "restart podman-forgejo.service" systemctl.log || fail "new secret: Forgejo not restarted"
 
+  # The switch to Pocket ID: a new issuer, id and secret, and the source
+  # "tailscale" is updated by its id and renamed, not added again.
+  name=pocket-id former=tailscale issuer=https://id.home.example.com
+  export STUB_ISSUER=$issuer
+  echo pocket-client > id
+  echo pocket-s3cret > secret # public-check: fake
+  run || { cat out err; fail "switch: failed"; }
+  if grep -q -- "add-oauth" podman.log; then fail "switch: added a second source: $(cat podman.log)"; fi
+  grep -q -- "update-oauth --id 1 --name pocket-id --provider openidConnect --auto-discover-url $issuer/.well-known/openid-configuration" podman.log \
+    || fail "switch: source not updated in place: $(cat podman.log)"
+  [ "$(cat stdin)" = "$(printf 'pocket-client\npocket-s3cret')" ] || fail "switch: stdin was: $(cat stdin)"
+  [ "$(cat source)" = pocket-id ] || fail "switch: source named $(cat source)"
+  grep -q "restart podman-forgejo.service" systemctl.log || fail "switch: Forgejo not restarted"
+  grep -q "renamed it pocket-id" out || fail "switch: no log line: $(cat out)"
+
+  # Again on Pocket ID: nothing to do.
+  run || { cat out err; fail "switched again: failed"; }
+  if grep -q -- "-oauth" podman.log; then fail "switched again: source changed: $(cat podman.log)"; fi
+  [ ! -s systemctl.log ] || fail "switched again: Forgejo restarted"
+
   # An empty secret: fails before touching Forgejo.
   : > secret
   if run; then fail "empty secret: succeeded"; fi
   [ ! -s podman.log ] || fail "empty secret: went on: $(cat podman.log)"
   grep -q "secret file secret is missing or empty" err || fail "empty secret: no clear error: $(cat err)"
-  echo s3cret-2 > secret # public-check: fake
+  echo pocket-s3cret > secret # public-check: fake
 
   # The issuer does not answer: tries FORGEJO_OIDC_TRIES times, then fails.
   if STUB_NO_ISSUER=1 run; then fail "no issuer: succeeded"; fi

@@ -1,22 +1,25 @@
 # Keeps Forgejo's OpenID Connect sign in source in step with the host's
 # config, inside the forgejo container.
 #
-#   forgejo-oidc <source name> <issuer URL> <client id file> <client secret file> <state file>
+#   forgejo-oidc <source name> <issuer URL> <client id file> <client secret file> <state file> [<former name>...]
 #
 # Waits until Forgejo answers and the issuer's discovery document can be
 # fetched from the container. Then adds the source, or updates it when the
 # issuer, client id or secret changed since the last run, which <state file>
-# records as a hash. Forgejo sets its sign in sources up only when it starts,
-# and fetches their discovery documents then, so it is restarted after a
-# change, and also when it started before the issuer answered: the start of
-# a sign in must redirect to the issuer.
+# records as a hash. Without a source of that name, a source with one of the
+# former names, another provider's, is updated and renamed in place, so a
+# switch of provider keeps one source under its id, and the accounts it
+# made and the links to it stay with it. Forgejo sets its sign in sources
+# up only when it starts, and fetches their discovery documents then, so it
+# is restarted after a change, and also when it started before the issuer
+# answered: the start of a sign in must redirect to the issuer.
 #
 # The id and secret go to the container on stdin, not on podman's command
 # line. FORGEJO_OIDC_TRIES (60) and FORGEJO_OIDC_WAIT (5 seconds) set how
 # long it waits.
 
-if [ "$#" -ne 5 ]; then
-  echo "usage: forgejo-oidc <source name> <issuer URL> <client id file> <client secret file> <state file>" >&2
+if [ "$#" -lt 5 ]; then
+  echo "usage: forgejo-oidc <source name> <issuer URL> <client id file> <client secret file> <state file> [<former name>...]" >&2
   exit 2
 fi
 name=$1
@@ -24,6 +27,8 @@ issuer=$2
 id_file=$3
 secret_file=$4
 state=$5
+shift 5
+former=("$@")
 tries=${FORGEJO_OIDC_TRIES:-60}
 delay=${FORGEJO_OIDC_WAIT:-5}
 discovery=$issuer/.well-known/openid-configuration
@@ -84,13 +89,26 @@ if ! sources=$(podman exec forgejo forgejo admin auth list); then
   exit 1
 fi
 # A header line, then ID, name, type and enabled per source.
-source_id=$(printf '%s\n' "$sources" | tail -n +2 | awk -v n="$name" '$2 == n { print $1; exit }')
+source_named() {
+  printf '%s\n' "$sources" | tail -n +2 | awk -v n="$1" '$2 == n { print $1; exit }'
+}
+source_id=$(source_named "$name")
+renamed=
+if [ -z "$source_id" ]; then
+  for old in "${former[@]}"; do
+    source_id=$(source_named "$old")
+    if [ -n "$source_id" ]; then
+      renamed=$old
+      break
+    fi
+  done
+fi
 
 want=$(printf '%s\n%s\n%s\n' "$issuer" "$id" "$secret" | sha256sum | cut -d ' ' -f 1)
 have=$(cat "$state" 2>/dev/null || true)
 
 changed=
-if [ -z "$source_id" ] || [ "$want" != "$have" ]; then
+if [ -z "$source_id" ] || [ -n "$renamed" ] || [ "$want" != "$have" ]; then
   if [ -n "$source_id" ]; then
     action=(update-oauth --id "$source_id")
   else
@@ -108,7 +126,9 @@ if [ -z "$source_id" ] || [ "$want" != "$have" ]; then
   fi
   printf '%s\n' "$want" > "$state"
   changed=1
-  if [ -n "$source_id" ]; then
+  if [ -n "$renamed" ]; then
+    echo "Updated the sign in source $renamed for $issuer and renamed it $name."
+  elif [ -n "$source_id" ]; then
     echo "Updated the sign in source $name for $issuer."
   else
     echo "Added the sign in source $name for $issuer."
