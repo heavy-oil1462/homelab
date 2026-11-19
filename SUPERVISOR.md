@@ -64,6 +64,13 @@ something is waiting for my approval. Can that be made more clear".
 - With each status report, run `skills/image-updates` against homelab
   and homelab-config; file one bump issue per repository for the updates
   found, security-relevant first (ADR-0016).
+- With each status report, read vaka's stream health from Prometheus
+  (vaka's docs/metrics.md) and add one line to the report: streams up;
+  disconnects in the last day; main-stream frame rate and keyframe
+  interval per camera, against their usual; motion lag; detection
+  latency p95; live-view time to first frame p50; and the recordings
+  disk. Flag anything off, and open an issue when it needs work (owner,
+  board 01a1f5f2-dab2, 2026-11-19).
 
 ## Lessons
 
