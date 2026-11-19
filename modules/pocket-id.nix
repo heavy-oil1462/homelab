@@ -7,8 +7,9 @@
 # It serves HTTP only on a unix socket, homelab.pocketId.socket, in a
 # directory that only its own user and the caddy group can enter, and Caddy
 # serves it as https://<hostName>.<domain> on the tailnet like every other
-# site. Nothing listens on a port. It runs as nixpkgs' pocket-id system
-# user with no capabilities and nixpkgs' sandboxing.
+# site. Nothing listens on a port but its actor runtime, on loopback. It
+# runs as nixpkgs' pocket-id system user with no capabilities and nixpkgs'
+# sandboxing.
 #
 # Its encryption key and its static admin API key are files under
 # /var/lib/secrets, made on the first start by pocket-id-keys. The clients

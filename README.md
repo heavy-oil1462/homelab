@@ -560,8 +560,9 @@ sign-out, forged headers and users who are not let in; the
 configurations the host refuses (docs/adr/0020-oidc-login-gate-at-the-proxy.md).
 The checks also run the `forgejo-admin` and `forgejo-oidc` scripts
 against stubs, the latter through a switch of provider, the `tsidp-clients` script against a fake tsidp state
-directory, the `pocket-id-clients` script against a stand-in for Pocket
-ID's admin API, and the Caddy identity snippets in a real Caddy.
+directory, the `pocket-id-clients` script against nixpkgs' Pocket ID, run
+with the example's settings on a temporary database, and the Caddy
+identity snippets in a real Caddy.
 
 ## CI
 

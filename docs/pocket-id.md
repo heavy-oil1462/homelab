@@ -95,9 +95,13 @@ Each service that signs in through Pocket ID is declared in
 secret go, who owns those files and which units read them. After Pocket
 ID starts, the `pocket-id-clients` unit creates or updates each client
 through Pocket ID's admin API, with the static API key, and writes the
-files. Pocket ID makes the secrets; the unit checks the one in the file
-on every run and asks for a new one when the file is empty or Pocket ID
-no longer accepts it, then restarts the client's units.
+files. A client keeps the id it is declared with, which is the id the
+service signs in with. Pocket ID makes the secrets; the unit checks the
+one in the file on every run and asks for a new one when the file is
+empty or Pocket ID no longer accepts it, deletes the client's other
+secrets, and restarts the client's units. It needs Pocket ID 2.14 or
+later, whose clients hold several secrets; the host does not build with
+an older one.
 
 ```nix
 homelab.pocketId.clients.grafana = {
@@ -112,6 +116,12 @@ The service's issuer is `config.homelab.pocketId.url`. Its discovery
 document is at `<issuer>/.well-known/openid-configuration`.
 
 - To rotate a secret, empty its file and restart `pocket-id-clients`.
+- A secret added in the admin UI works next to the file's until the unit
+  next makes one. Deleting the file's secret there gets a new one on the
+  next run.
+- A client already in Pocket ID with a declared id, made by hand or left
+  by a run that failed, is taken over: its settings follow the config,
+  and its secrets are replaced by the one written to the file.
 - Removing a client from the config deletes it from Pocket ID; its files
   stay.
 - Settings the option does not cover, such as restricting a client to a
