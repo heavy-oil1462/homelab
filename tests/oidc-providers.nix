@@ -55,7 +55,7 @@ let
     ++ expect "tsidp: Grafana's provider name" "Tailscale" (grafanaEnv tsidp).GF_AUTH_GENERIC_OAUTH_NAME
     ++ expect "tsidp: Grafana's token URL" "${idp}/token" (grafanaEnv tsidp).GF_AUTH_GENERIC_OAUTH_TOKEN_URL
     ++ expect "tsidp: Grafana's userinfo URL" "${idp}/userinfo" (grafanaEnv tsidp).GF_AUTH_GENERIC_OAUTH_API_URL
-    ++ expect "tsidp: Grafana's email lookup" "false" (grafanaEnv tsidp).GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP
+    ++ expect "tsidp: Grafana's email lookup" null ((grafanaEnv tsidp).GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP or null)
     ++ expect "tsidp: Grafana's role path"
       "contains(['alice@example.com', 'alice@github', 'alice@github.idp.tailnet.invalid'], email) && 'Admin'"
       (grafanaEnv tsidp).GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH

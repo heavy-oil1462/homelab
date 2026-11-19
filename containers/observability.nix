@@ -416,18 +416,19 @@ in
         GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_STRICT = "true";
         GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP = "true";
         GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN = "true";
+        # As with proxy authentication: no anonymous access, no password
+        # login and no basic auth. Service account tokens keep working.
+        GF_AUTH_ANONYMOUS_ENABLED = "false";
+        GF_AUTH_DISABLE_LOGIN_FORM = "true";
+        GF_AUTH_BASIC_ENABLED = "false";
+      } // lib.optionalAttrs onPocketId {
         # Grafana finds a generic OAuth user by the provider's user id, and
         # by email only with this. Pocket ID's ids are not tsidp's, so
         # after a switch an existing user with the same email is taken
         # over, keeping its preferences and stars, instead of a second user
         # being made. Only the admins sign in at all, by the same claim
         # (docs/adr/0019-forgejo-and-grafana-on-pocket-id.md).
-        GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP = lib.boolToString onPocketId;
-        # As with proxy authentication: no anonymous access, no password
-        # login and no basic auth. Service account tokens keep working.
-        GF_AUTH_ANONYMOUS_ENABLED = "false";
-        GF_AUTH_DISABLE_LOGIN_FORM = "true";
-        GF_AUTH_BASIC_ENABLED = "false";
+        GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP = "true";
       } else if cfg.grafanaProxyAuth.enable then {
         # The tailnet user from Caddy's grafana_identity snippet, trusted only
         # from Caddy's address; Grafana answers 401 to the header from
