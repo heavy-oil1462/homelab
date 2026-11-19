@@ -7,17 +7,22 @@
 # The spec is a JSON list from homelab.pocketId.clients, one object per
 # client: id, displayName, redirectUris, logoutRedirectUris, pkce, idFile,
 # secretFile, owner ("user:group") and units. The API key is Pocket ID's
-# STATIC_API_KEY, an admin's. For each client:
+# STATIC_API_KEY, an admin's. It needs Pocket ID 2.14 or later, whose
+# clients hold several secrets. For each client:
 #
-# - The client is created with its id, or updated when its name, redirect
-#   URIs, PKCE or confidentiality differ. Settings made in the admin UI
-#   that the spec does not name (group restriction, launch URL, logo) are
-#   kept.
+# - The client is created with its id, which Pocket ID keeps, or updated
+#   when its name, redirect URIs, PKCE or confidentiality differ. A client
+#   with the id that is already there, made by hand or by a run that
+#   failed half way, is taken over. Settings made in the admin UI that the
+#   spec does not name (group restriction, launch URL, logo, token
+#   lifetimes) are kept.
 # - Pocket ID makes client secrets itself and keeps only their hash, so the
-#   secret file is checked against it by introspecting a dummy token with
+#   secret file is checked against them by introspecting a dummy token with
 #   the client's credentials: 200 means Pocket ID took them, 401 that it
 #   did not. A new client, a missing or empty secret file and a refused
-#   secret get a new secret from Pocket ID, written to the file.
+#   secret get a new secret, written to the file: the one Pocket ID made
+#   with a new client, or else one asked for. The client's other secrets
+#   are then deleted, so only the file's works.
 # - The id and secret files are mode 0400, owned by owner, written to a
 #   temporary file and renamed into place. When either changed, the
 #   client's units are restarted, without waiting for them.
@@ -138,6 +143,7 @@ for ((i = 0; i < count; i++)); do
   }' <<< "$client")
   created=
   changed=
+  rm -f "$tmp/new-secret"
 
   status=$(request GET "/api/oidc/clients/$id")
   case $status in
@@ -151,13 +157,9 @@ for ((i = 0; i < count; i++)); do
       }' "$tmp/body")
       if [ "$(jq -cS . <<< "$have")" != "$(jq -cS . <<< "$want")" ]; then
         # The update replaces every field, so those the spec leaves to the
-        # admin UI are sent back as they are.
-        body=$(jq -c --argjson want "$want" '{
-          requiresReauthentication,
-          launchURL,
-          isGroupRestricted,
-          credentials: (.credentials // {})
-        } + $want' "$tmp/body")
+        # admin UI are sent back as they are. Pocket ID ignores the ones it
+        # does not take, such as the secrets.
+        body=$(jq -c --argjson want "$want" '. + $want' "$tmp/body")
         status=$(request PUT "/api/oidc/clients/$id" "$body")
         if [ "$status" != 200 ]; then
           echo "Pocket ID answered $status when updating client $id: $(cat "$tmp/body")" >&2
@@ -175,7 +177,15 @@ for ((i = 0; i < count; i++)); do
           exit 1
           ;;
       esac
+      if [ "$(jq -r .id "$tmp/body")" != "$id" ]; then
+        echo "Pocket ID made client $id with the id $(jq -r .id "$tmp/body") instead; it must keep the id it is given." >&2
+        exit 1
+      fi
       created=1
+      # The secret Pocket ID makes with a new client, unless
+      # AUTO_CREATE_OIDC_CLIENT_SECRET is off. Shown only in this answer.
+      jq '.createdSecret // {}' "$tmp/body" > "$tmp/new-secret"
+      rm -f "$tmp/body"
       echo "Created client $id in Pocket ID."
       ;;
     *)
@@ -191,15 +201,38 @@ for ((i = 0; i < count; i++)); do
   fi
 
   if [ -n "$created" ] || [ ! -s "$secret_file" ] || ! secret_accepted "$id" "$secret_file"; then
-    status=$(request POST "/api/oidc/clients/$id/secret")
-    if [ "$status" != 200 ]; then
-      echo "Pocket ID answered $status when making a secret for client $id." >&2
-      exit 1
+    if [ "$(jq -r '.secret // ""' "$tmp/new-secret" 2>/dev/null)" = "" ]; then
+      status=$(request POST "/api/oidc/clients/$id/secrets" '{}')
+      if [ "$status" != 201 ]; then
+        echo "Pocket ID answered $status when making a secret for client $id: $(cat "$tmp/body")" >&2
+        exit 1
+      fi
+      mv -f "$tmp/body" "$tmp/new-secret"
     fi
-    jq -j '.secret // error("no secret in the answer")' "$tmp/body" | write_secret_file "$secret_file" "$owner"
-    rm -f "$tmp/body"
+    jq -j '.secret // error("no secret in the answer")' "$tmp/new-secret" | write_secret_file "$secret_file" "$owner"
+    keep=$(jq -r .id "$tmp/new-secret")
+    rm -f "$tmp/new-secret"
     changed=1
     echo "Wrote a new client secret of $id to $secret_file."
+
+    # The secrets made before, by the admin UI, a failed run or Pocket ID
+    # with the client, stop working.
+    status=$(request GET "/api/oidc/clients/$id/secrets")
+    if [ "$status" != 200 ]; then
+      echo "Pocket ID answered $status when listing the secrets of client $id: $(cat "$tmp/body")" >&2
+      exit 1
+    fi
+    while IFS= read -r secret_id; do
+      status=$(request DELETE "/api/oidc/clients/$id/secrets/$secret_id")
+      case $status in
+        200 | 204 | 404) ;;
+        *)
+          echo "Pocket ID answered $status when deleting an old secret of client $id: $(cat "$tmp/body")" >&2
+          exit 1
+          ;;
+      esac
+      echo "Deleted an old secret of client $id."
+    done < <(jq -r --arg keep "$keep" '.[].id | select(. != $keep)' "$tmp/body")
   fi
 
   if [ -n "$changed" ]; then

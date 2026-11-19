@@ -75,3 +75,6 @@ never reaches the workers.
   (Accepted)
 - [ADR-0020](0020-oidc-login-gate-at-the-proxy.md): Sites that can't sign
   in themselves get an OIDC login gate at the proxy (Accepted)
+- [ADR-0021](0021-pocket-id-clients-on-the-secrets-api.md):
+  pocket-id-clients follows Pocket ID's secrets API and is checked
+  against Pocket ID itself (Accepted)
