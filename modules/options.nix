@@ -423,7 +423,7 @@ in
           default = false;
           description = ''
             A sign-in gate in front of sites that cannot sign anyone in
-            themselves (docs/adr/0019-oidc-login-gate-at-the-proxy.md).
+            themselves (docs/adr/0020-oidc-login-gate-at-the-proxy.md).
             Runs nixpkgs' oauth2-proxy on a unix socket that only the caddy
             container mounts. A site that imports the generated snippet
             oidc_gate or oidc_owner_only is reached only after signing in

@@ -1,5 +1,5 @@
 # The example server's OIDC login gate, as evaluated
-# (docs/adr/0019-oidc-login-gate-at-the-proxy.md):
+# (docs/adr/0020-oidc-login-gate-at-the-proxy.md):
 #
 # - oauth2-proxy signs in at Pocket ID with PKCE, takes the user name as
 #   the email, serves only on its socket, and keeps the cookie Secure on
@@ -9,11 +9,11 @@
 #   secrets as credentials;
 # - the socket's directory is the caddy group's and mounted into Caddy;
 # - the host refuses a Caddyfile importing the snippets with the gate off,
-#   the gate on Pocket ID without its client, and a session shorter than
-#   its renewal.
+#   the gate on Pocket ID without its client or with users allowed to
+#   change their own username, and a session shorter than its renewal.
 #
 # The sign-in itself is tests/oidc-gate.nix.
-{ lib, writeText, config, withoutGate, withoutClient, shortSession }:
+{ lib, writeText, config, withoutGate, withoutClient, ownAccountEdit, shortSession }:
 
 let
   gate = config.homelab.reverseProxy.oidcGate;
@@ -67,10 +67,12 @@ let
       "a Caddyfile importing the snippets is taken with the gate off"
     ++ lib.optional (!refuses withoutClient "homelab.pocketId.clients.oidc-gate")
       "the gate is taken without its Pocket ID client"
+    ++ lib.optional (!refuses ownAccountEdit "lets users through by their Pocket ID username")
+      "the gate is taken with users allowed to rename themselves"
     ++ lib.optional (!refuses shortSession "sessionLifetime")
       "a session shorter than its renewal is taken";
 in
 if problems != [ ] then
-  throw "The OIDC gate breaks docs/adr/0019-oidc-login-gate-at-the-proxy.md:\n${lib.concatStringsSep "\n" problems}"
+  throw "The OIDC gate breaks docs/adr/0020-oidc-login-gate-at-the-proxy.md:\n${lib.concatStringsSep "\n" problems}"
 else
   writeText "oidc-gate-module" "ok"

@@ -310,6 +310,7 @@
             config = exampleServer.config;
             withoutGate = without { homelab.reverseProxy.oidcGate.enable = nixpkgs.lib.mkForce false; };
             withoutClient = without { homelab.pocketId.clients = nixpkgs.lib.mkForce { }; };
+            ownAccountEdit = without { homelab.pocketId.allowOwnAccountEdit = true; };
             shortSession = without { homelab.reverseProxy.oidcGate.sessionLifetime = "30m"; };
           };
         # The OIDC login gate in a real Caddy and oauth2-proxy, against a

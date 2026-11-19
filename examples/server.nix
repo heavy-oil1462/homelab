@@ -151,7 +151,7 @@
       # A login gate for sites that cannot sign anyone in themselves: the
       # camera's own pages in the example Caddyfile import oidc_owner_only,
       # so only alice, signed in at Pocket ID, reaches them
-      # (docs/adr/0019-oidc-login-gate-at-the-proxy.md).
+      # (docs/adr/0020-oidc-login-gate-at-the-proxy.md).
       oidcGate = {
         enable = true;
         owners = [ "alice" ];

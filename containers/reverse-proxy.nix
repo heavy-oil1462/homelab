@@ -9,6 +9,12 @@ let
   grafanaAuth = config.homelab.observability.grafanaProxyAuth;
   pocketId = config.homelab.pocketId;
   gate = cfg.oidcGate;
+  # Users cannot change their own username in Pocket ID, as
+  # containers/observability.nix checks for Grafana: its settings come from
+  # the environment, and own-account editing is off.
+  pocketIdSettings = config.services.pocket-id.settings;
+  pocketIdOwnEditOff = (pocketIdSettings.UI_CONFIG_DISABLED or false) == true
+    && (pocketIdSettings.ALLOW_OWN_ACCOUNT_EDIT or true) == false;
 
   # Snippets that turn the tailnet login from tailnet_identity into what a
   # service accepts, for the services with proxy authentication on. Each
@@ -68,7 +74,7 @@ let
   ]));
 
   # The OIDC login gate's snippets, from homelab.reverseProxy.oidcGate
-  # (docs/adr/0019-oidc-login-gate-at-the-proxy.md). oauth2-proxy's own
+  # (docs/adr/0020-oidc-login-gate-at-the-proxy.md). oauth2-proxy's own
   # pages under /oauth2/ (the sign-in, its callback and sign-out) go to it;
   # everything else asks its /oauth2/auth first. It answers 202 with the
   # user name for a session of a user in allowed_emails, which holds the
@@ -211,6 +217,12 @@ in
           assertion = !(gate.enable && pocketId.enable && gate.issuer == pocketId.url)
             || (gateClient != null && lib.elem "oauth2-proxy.service" gateClient.units);
           message = "homelab.reverseProxy.oidcGate signs in through Pocket ID, which needs its client declared as homelab.pocketId.clients.${gate.clientId} with oauth2-proxy.service among its units (see examples/server.nix).";
+        }
+        {
+          # The gate matches the username, which users could otherwise
+          # change to one it lets through.
+          assertion = !(gate.enable && pocketId.enable && gate.issuer == pocketId.url) || pocketIdOwnEditOff;
+          message = "homelab.reverseProxy.oidcGate lets users through by their Pocket ID username, but Pocket ID lets users change their own; turn homelab.pocketId.allowOwnAccountEdit off (docs/adr/0020-oidc-login-gate-at-the-proxy.md).";
         }
         {
           assertion = !gate.enable || minutes gate.sessionLifetime > 30;
@@ -366,7 +378,7 @@ in
     })
 
     (lib.mkIf gate.enable {
-      # The OIDC login gate (docs/adr/0019-oidc-login-gate-at-the-proxy.md):
+      # The OIDC login gate (docs/adr/0020-oidc-login-gate-at-the-proxy.md):
       # nixpkgs' oauth2-proxy, which answers Caddy's forward_auth and runs
       # the sign-in with the provider. It keeps no state; the session is
       # the encrypted cookie, with the provider's tokens in it.

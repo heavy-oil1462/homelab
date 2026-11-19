@@ -1,4 +1,4 @@
-# ADR-0019: Sites that can't sign in themselves get an OIDC login gate at the proxy
+# ADR-0020: Sites that can't sign in themselves get an OIDC login gate at the proxy
 
 Status: Accepted
 
@@ -42,6 +42,11 @@ What oauth2-proxy 7.15.2 and Pocket ID 2.7.0 do, read in their source:
   `email` claim whose `email_verified` is false. Pocket ID makes email
   optional and marks emails unverified unless its admin says otherwise.
   It always sends `preferred_username`, the user's unique name.
+- Pocket ID keeps usernames unique, but by default lets every user change
+  their own username, email and name. With
+  `homelab.pocketId.allowOwnAccountEdit` off, the default since
+  [ADR-0019](0019-forgejo-and-grafana-on-pocket-id.md), only the admin
+  can.
 - Pocket ID issues a refresh token with every code, good for 30 days,
   and refuses it once the user is disabled or deleted. Its redirect URIs
   take `*` within a host name.
@@ -79,6 +84,18 @@ What oauth2-proxy 7.15.2 and Pocket ID 2.7.0 do, read in their source:
   `preferred_username` as the email (`--oidc-email-claim`), asks only for
   `openid profile`, and gives any user of the provider a session. Who
   passes is up to the snippet.
+- **The name match rests on users not renaming themselves.** It is sound
+  only if no user but the one holding a listed name can come to hold it.
+  Pocket ID keeps names unique, so what remains is a user renaming
+  themselves to a listed name nobody holds, or one freed by a rename: an
+  owner who once changed their name would leave it open to anyone. With
+  own-account editing off, only the admin renames users, so a listed name
+  belongs to whom the admin gave it. A host whose gate signs in through
+  its own Pocket ID does not build with
+  `homelab.pocketId.allowOwnAccountEdit` on, as Grafana's email match
+  does not (ADR-0019). Matching on `sub`, Pocket ID's fixed user id, was
+  the alternative; it needs the owner to look up a UUID for the config
+  and names nobody in the site's logs.
 - **Two snippets, generated** from the options and put ahead of the
   Caddyfile like the identity snippets (ADR-0005): `oidc_owner_only`
   lets through `owners`; `oidc_gate` lets through `owners` and `users`.
@@ -139,10 +156,8 @@ What oauth2-proxy 7.15.2 and Pocket ID 2.7.0 do, read in their source:
   so does each gated site's upstream. It is encrypted, but a compromised
   upstream could replay it to the gated sites while it lasts. A host can
   narrow `cookieDomain`, at the price of a sign-in per site.
-- The names in `owners` and `users` must stay Pocket ID usernames in use.
-  Pocket ID keeps usernames unique, but lets users change their own
-  unless its admin turns that off; a listed name nobody holds could be
-  taken.
+- Renaming a user whose name is listed changes who passes, so the lists
+  follow the admin's renames.
 - oauth2-proxy reads Pocket ID's discovery document at start, through
   this host's own Caddy, so the host must resolve `id.<domain>` to it.
   Until Pocket ID answers it exits and is restarted every 5 seconds;
@@ -157,7 +172,8 @@ What oauth2-proxy 7.15.2 and Pocket ID 2.7.0 do, read in their source:
   for, one sign-in for two sites, sign-out from both, forged headers and
   query names refused, and a user who is not an owner kept out of the
   owner-only site. The `oidc-gate-module` check holds the evaluated
-  service and the configurations the host refuses. Pocket ID itself and
+  service and the configurations the host refuses, own-account editing
+  on among them. Pocket ID itself and
   the renewal after 30 minutes are tested by hand.
 
 Related: [ADR-0003](0003-tailscale-identity-for-sign-in.md) (WhoIs through
@@ -165,4 +181,6 @@ Caddy), [ADR-0005](0005-proxy-auth-only-from-caddy.md) (Remote-User only
 from Caddy), [ADR-0006](0006-tsidp-for-oidc-sign-in.md) and
 [ADR-0010](0010-tsidp-clients-declared-in-nix.md) (tsidp),
 [ADR-0014](0014-containers-run-unprivileged.md) (unprivileged services),
-[ADR-0018](0018-pocket-id-is-the-oidc-provider.md) (Pocket ID).
+[ADR-0018](0018-pocket-id-is-the-oidc-provider.md) (Pocket ID),
+[ADR-0019](0019-forgejo-and-grafana-on-pocket-id.md) (users do not edit
+their own accounts).

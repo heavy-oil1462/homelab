@@ -62,7 +62,9 @@ let
       (grafanaEnv tsidp).GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH
     ++ expectElem "tsidp: Grafana starts after" "tsidp.service" tsidp.systemd.services.podman-grafana.after
     ++ expect "tsidp: tsidp's clients" [ "forgejo" "grafana" ] (lib.attrNames tsidp.homelab.tsidp.clients)
-    ++ expect "tsidp: Pocket ID's clients" [ ] (lib.attrNames tsidp.homelab.pocketId.clients)
+    # The login gate's client is declared on either provider.
+    ++ expect "tsidp: Pocket ID's clients" [ ]
+      (lib.attrNames (removeAttrs tsidp.homelab.pocketId.clients [ tsidp.homelab.reverseProxy.oidcGate.clientId ]))
 
     # Pocket ID.
     ++ expect "pocket-id: Forgejo's issuer" id pocketId.homelab.forgejo.oidc.issuer

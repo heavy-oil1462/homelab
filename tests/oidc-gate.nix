@@ -1,4 +1,4 @@
-# The OIDC login gate end to end (docs/adr/0019-oidc-login-gate-at-the-proxy.md):
+# The OIDC login gate end to end (docs/adr/0020-oidc-login-gate-at-the-proxy.md):
 # the example server's oauth2-proxy command line, its cookie secret
 # generator, and the oidc_owner_only and oidc_gate snippets from its
 # generated Caddyfile, in a real Caddy, against a stand-in for Pocket ID.

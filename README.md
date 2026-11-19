@@ -79,7 +79,7 @@ Services (OCI containers, pinned by digest):
   sign-in covers every gated site under `homelab.domain` for 24 hours
   (`sessionLifetime`), renewed with Pocket ID every 30 minutes. Its client
   is declared in `homelab.pocketId.clients`, as the example server does
-  (docs/adr/0019-oidc-login-gate-at-the-proxy.md).
+  (docs/adr/0020-oidc-login-gate-at-the-proxy.md).
 - `observability`: Prometheus, Loki, Grafana with provisioned datasources,
   dashboards and alerting. A blackbox exporter on the host probes the HTTPS
   URLs in `homelab.observability.probeTargets` through Caddy, as clients
@@ -557,7 +557,7 @@ its `oidc_owner_only` and `oidc_gate` snippets in a real Caddy against a
 stand-in for Pocket ID: the sign-in and back, one sign-in for two sites,
 sign-out, forged headers and users who are not let in; the
 `oidc-gate-module` check holds the evaluated service, its socket and the
-configurations the host refuses (docs/adr/0019-oidc-login-gate-at-the-proxy.md).
+configurations the host refuses (docs/adr/0020-oidc-login-gate-at-the-proxy.md).
 The checks also run the `forgejo-admin` and `forgejo-oidc` scripts
 against stubs, the latter through a switch of provider, the `tsidp-clients` script against a fake tsidp state
 directory, the `pocket-id-clients` script against a stand-in for Pocket
