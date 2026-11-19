@@ -145,6 +145,11 @@ The apps match the owner's existing account like this
   cannot change their own email in Pocket ID.
 - cue, fyr, podium and vaka sign in through dev/oidc; which claim each
   matches on is set when it moves to Pocket ID.
+- The proxy's login gate (`homelab.reverseProxy.oidcGate`) matches the
+  username: the names in its `owners` and `users` are Pocket ID
+  usernames, and the site behind it gets the username as `Remote-User`.
+  Its client is declared like any other, as `examples/server.nix` does
+  (docs/adr/0019-oidc-login-gate-at-the-proxy.md).
 
 ## Moving Forgejo and Grafana to Pocket ID
 

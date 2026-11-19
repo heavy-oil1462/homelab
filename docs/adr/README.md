@@ -73,3 +73,5 @@ never reaches the workers.
 - [ADR-0019](0019-forgejo-and-grafana-on-pocket-id.md): Forgejo and
   Grafana choose their OIDC provider, and keep existing users on a switch
   (Accepted)
+- [ADR-0019](0019-oidc-login-gate-at-the-proxy.md): Sites that can't sign
+  in themselves get an OIDC login gate at the proxy (Accepted)
