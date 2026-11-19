@@ -75,6 +75,10 @@ in
         TRUST_PROXY = true;
         ANALYTICS_DISABLED = true;
         VERSION_CHECK_DISABLED = true;
+        # Pocket ID 2.19 runs an actor runtime whose peers talk on
+        # ACTORS_PORT (1414), on every interface by default. A single
+        # replica has no peers, so it stays on loopback.
+        ACTORS_HOST = "127.0.0.1";
         # The application settings come from here, not the admin UI, so
         # whether users edit their own accounts is the config's
         # (docs/adr/0019-forgejo-and-grafana-on-pocket-id.md). The others
@@ -143,6 +147,12 @@ in
       {
         assertion = config.virtualisation.oci-containers.containers ? caddy;
         message = "homelab.pocketId serves only on a socket that the caddy container mounts; import containers/reverse-proxy.nix on the same host.";
+      }
+      {
+        # Its clients hold several secrets, made and deleted through
+        # /api/oidc/clients/<id>/secrets, since 2.14.
+        assertion = lib.versionAtLeast config.services.pocket-id.package.version "2.14";
+        message = "pocket-id-clients needs Pocket ID 2.14 or later, and services.pocket-id.package is ${config.services.pocket-id.package.version}.";
       }
       {
         assertion = config.systemd.services.pocket-id.serviceConfig.WorkingDirectory == cfg.dataDir;

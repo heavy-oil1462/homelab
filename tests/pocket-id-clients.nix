@@ -1,30 +1,45 @@
-# Runs modules/pocket-id-clients.sh against a stand-in for Pocket ID's
-# admin API on a unix socket and a stubbed systemctl
-# (docs/adr/0018-pocket-id-is-the-oidc-provider.md): a first run creates
-# both clients and writes their files, keeping a client made in the admin
-# UI; a run with nothing to do changes nothing and restarts nothing; a
-# changed redirect URI updates the client and keeps what the admin UI set;
-# an emptied secret file and a secret Pocket ID refuses each get a new
-# secret and restart only their client's units; a client no longer
-# declared is deleted with its files left; a wrong API key and a Pocket ID
-# that never answers fail. No secret is in the output.
+# Runs modules/pocket-id-clients.sh against nixpkgs' Pocket ID, started on
+# a temporary state directory with SQLite, its unit's settings, a unix
+# socket, the static API key and an encryption key, and a stubbed
+# systemctl (docs/adr/0018-pocket-id-is-the-oidc-provider.md):
 #
-# The stand-in logs to a file and is killed at the end, so nothing holds
-# the build's output open, and every run has a deadline.
-{ runCommand, callPackage, runtimeShell, python3, jq }:
+# - a first run takes over the forgejo client a failed run left with a
+#   secret nobody kept, creates grafana's, writes both clients' files and
+#   leaves one secret on each, the one in the file; a client made in the
+#   admin UI stays as it is;
+# - a run with nothing to do changes nothing in Pocket ID and restarts
+#   nothing;
+# - a changed redirect URI updates the client and keeps what the admin UI
+#   set;
+# - an emptied secret file and a secret deleted in the admin UI each get a
+#   new secret, the old one stops working, and only their client's units
+#   restart;
+# - a client no longer declared is deleted, its files left;
+# - a wrong API key and a Pocket ID that never answers fail.
+#
+# Pocket ID logs every request, which shows what a run wrote. No secret is
+# in the output. Pocket ID is killed at the end, so nothing holds the
+# build's output open, and every run has a deadline.
+{ lib, runCommand, callPackage, runtimeShell, python3, jq, curl, package, settings }:
 
 let
   script = callPackage ../modules/pocket-id-clients.nix { };
+  # The unit's settings as nixpkgs' module writes them to its environment
+  # file; the test's own socket and actor port replace the host's.
+  environment = lib.concatStringsSep " " (lib.mapAttrsToList
+    (name: value: lib.escapeShellArg "${name}=${if lib.isBool value then lib.boolToString value else toString value}")
+    (removeAttrs settings [ "UNIX_SOCKET" "ACTORS_PORT" ]));
 in
-runCommand "pocket-id-clients-test" { nativeBuildInputs = [ python3 jq ]; } ''
+runCommand "pocket-id-clients-test" { nativeBuildInputs = [ python3 jq curl ]; } ''
   set -euo pipefail
-  mkdir bin fake secrets
+  mkdir bin state secrets
   export PATH=$PWD/bin:$PATH STUB=$PWD
   export POCKET_ID_CLIENTS_TRIES=3 POCKET_ID_CLIENTS_WAIT=0
-  fake=
+  pid=
   fail() {
     echo "FAIL: $*" >&2
-    [ -z "$fake" ] || kill "$fake" 2> /dev/null || true
+    tail -n 20 pocket-id.log >&2 || true
+    [ -z "$pid" ] || kill "$pid" 2> /dev/null || true
     exit 1
   }
 
@@ -36,8 +51,42 @@ runCommand "pocket-id-clients-test" { nativeBuildInputs = [ python3 jq ]; } ''
 
   owner="$(id -u):$(id -g)"
   sock=$PWD/pocket-id.sock
-  printf 'api-key-0123456789abcdef\n' > api-key # public-check: fake
-  clients=fake/clients.json
+  key=api-key-0123456789abcdef # public-check: fake
+  printf '%s\n' "$key" > api-key
+
+  # The actor runtime needs a port of its own; the build may share the
+  # network with others.
+  actors=$(python3 -c 'import socket; s = socket.socket(type=socket.SOCK_DGRAM); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+  (
+    cd state
+    exec env ${environment} \
+      UNIX_SOCKET="$sock" ACTORS_PORT="$actors" \
+      STATIC_API_KEY="$key" ENCRYPTION_KEY=encryption-key-0123456789abcdef \
+      ${lib.getExe package}
+  ) > pocket-id.log 2>&1 &
+  pid=$!
+  for _ in $(seq 300); do
+    [ "$(curl -s -o /dev/null -w '%{http_code}' --unix-socket "$sock" http://pocket-id/healthz || true)" = 204 ] && break
+    kill -0 "$pid" 2> /dev/null || fail "Pocket ID exited"
+    sleep 0.1
+  done
+  [ -S "$sock" ] || fail "Pocket ID did not answer in 30 seconds"
+  grep -q "version=${package.version}" pocket-id.log || fail "not Pocket ID ${package.version}"
+
+  # api <method> <path> [<JSON body>]: Pocket ID's admin API, as the admin
+  # UI calls it. Prints the status; the body goes to api.json.
+  api() {
+    local args=(-s -o api.json -w '%{http_code}' --unix-socket "$sock" -X "$1" -H "X-API-Key: $key")
+    if [ "$#" -gt 2 ]; then args+=(-H 'Content-Type: application/json' --data-binary "$3"); fi
+    curl "''${args[@]}" "http://pocket-id$2"
+  }
+  # Whether Pocket ID takes client $1's secret $2, as a service would.
+  introspect() {
+    curl -s -o /dev/null -w '%{http_code}' --unix-socket "$sock" -u "$1:$2" \
+      --data-urlencode token=none http://pocket-id/api/oidc/introspect
+  }
+  client() { [ "$(api GET "/api/oidc/clients/$1")" = 200 ] || fail "no client $1"; jq -r "$2" api.json; }
+  secrets() { [ "$(api GET "/api/oidc/clients/$1/secrets")" = 200 ] || fail "no secrets of $1"; jq length api.json; }
 
   # The spec as the module writes it: Forgejo's client, and Grafana's when
   # $1 is set, with Grafana's redirect URI $2.
@@ -48,40 +97,47 @@ runCommand "pocket-id-clients-test" { nativeBuildInputs = [ python3 jq ]; } ''
         idFile: "\($dir)/forgejo-oidc-client-id", secretFile: "\($dir)/forgejo-oidc-client-secret",
         owner: $owner, units: ["forgejo-oidc.service"]}]
       + if $grafana == "" then [] else
-        [{id: "grafana", displayName: "grafana", redirectUris: [$uri], logoutRedirectUris: [], pkce: true,
+        [{id: "grafana", displayName: "Grafana", redirectUris: [$uri], logoutRedirectUris: [], pkce: true,
           idFile: "\($dir)/grafana-oidc-client-id", secretFile: "\($dir)/grafana-oidc-client-secret",
           owner: $owner, units: ["podman-grafana.service"]}]
       end' > spec.json
   }
+  # run [<API key file>] [<socket>]: the unit's script. The requests it
+  # made, as "METHOD path" from Pocket ID's log, go to requests.
   run() {
     : > systemctl.log
-    : > fake/requests
-    timeout 60 ${script}/bin/pocket-id-clients spec.json "$sock" "''${1:-api-key}" declared.json > out 2> err
+    local from=$(($(wc -l < pocket-id.log) + 1))
+    local status=0
+    timeout 60 ${script}/bin/pocket-id-clients spec.json "''${2:-$sock}" "''${1:-api-key}" declared.json > out 2> err || status=$?
+    tail -n "+$from" pocket-id.log | sed -n 's/.* method=\([A-Z]*\) path=\([^ ]*\) .*/\1 \2/p' > requests
+    return "$status"
   }
-  field() { jq -r "$1" "$clients"; }
-  # Whether a request was made, as "METHOD path".
-  requested() { grep -qx "$1" fake/requests; }
-
-  python3 -I ${./fake-pocket-id.py} "$sock" api-key-0123456789abcdef fake > fake.log 2>&1 &
-  fake=$!
-  for _ in $(seq 100); do
-    [ -S "$sock" ] && break
-    kill -0 "$fake" 2> /dev/null || { cat fake.log; fail "the stand-in for Pocket ID exited"; }
-    sleep 0.1
-  done
-  [ -S "$sock" ] || { cat fake.log; fail "the stand-in for Pocket ID did not start in 10 seconds"; }
+  # Whether the last run wrote anything to Pocket ID.
+  wrote() { grep -v '^GET \|^POST /api/oidc/introspect$' requests; }
 
   # A client made by hand in the admin UI.
-  echo '{"nextcloud": {"id": "nextcloud", "name": "Nextcloud", "callbackURLs": ["https://cloud.example.com/cb"],
-    "logoutCallbackURLs": [], "isPublic": false, "pkceEnabled": false, "requiresReauthentication": false,
-    "launchURL": null, "isGroupRestricted": false, "credentials": {}, "secret": "hand-made"}}' > "$clients" # public-check: fake
-  hand=$(jq -cS .nextcloud "$clients")
+  api POST /api/oidc/clients '{"name": "Nextcloud", "callbackURLs": ["https://cloud.example.com/cb"]}' > status
+  [ "$(cat status)" = 201 ] || fail "hand-made client: $(cat status) $(cat api.json)"
+  hand=$(jq -r .id api.json)
+  [ "$(client "$hand" .name)" = Nextcloud ] || fail "hand-made client not made"
+  client "$hand" 'del(.credentials)' > hand.json
 
-  # First run: both clients made, their files written 0400 with the
-  # secrets Pocket ID made, and both clients' units restarted.
+  # The client a failed run of the old script left: created with the id
+  # forgejo, and a secret Pocket ID made with it that went nowhere.
+  api POST /api/oidc/clients '{"id": "forgejo", "name": "Forgejo", "callbackURLs": ["https://git.example.com/user/oauth2/pocket-id/callback"]}' > status
+  [ "$(cat status)" = 201 ] || fail "leftover client: $(cat status) $(cat api.json)"
+  [ "$(jq -r .id api.json)" = forgejo ] || fail "Pocket ID did not keep the id forgejo: $(jq -r .id api.json)"
+  lost=$(jq -r '.createdSecret.secret // empty' api.json)
+  [ -n "$lost" ] || fail "Pocket ID made no secret with the client; is AUTO_CREATE_OIDC_CLIENT_SECRET off?"
+
+  # First run: forgejo taken over, grafana made, their files written 0400
+  # with secrets Pocket ID takes, one secret each, and both clients' units
+  # restarted.
   spec grafana
   : > secrets/grafana-oidc-client-secret
   run || { cat out err; fail "first: failed"; }
+  grep -qx "POST /api/oidc/clients" requests || fail "first: grafana not created"
+  [ "$(grep -cx "POST /api/oidc/clients" requests)" = 1 ] || fail "first: forgejo created again"
   [ "$(cat secrets/forgejo-oidc-client-id)" = forgejo ] || fail "first: forgejo id file"
   [ "$(cat secrets/grafana-oidc-client-id)" = grafana ] || fail "first: grafana id file"
   for f in secrets/*; do
@@ -89,82 +145,88 @@ runCommand "pocket-id-clients-test" { nativeBuildInputs = [ python3 jq ]; } ''
   done
   forgejo_secret=$(cat secrets/forgejo-oidc-client-secret)
   grafana_secret=$(cat secrets/grafana-oidc-client-secret)
-  [ "$(field .forgejo.secret)" = "$forgejo_secret" ] || fail "first: forgejo's file is not Pocket ID's secret"
-  [ "$(field .grafana.secret)" = "$grafana_secret" ] || fail "first: grafana's file is not Pocket ID's secret"
-  [ "$(field .forgejo.name)" = Forgejo ] || fail "first: forgejo's name is $(field .forgejo.name)"
-  [ "$(field '.forgejo.callbackURLs | join(" ")')" = https://git.example.com/user/oauth2/pocket-id/callback ] || fail "first: forgejo's redirect URIs"
-  [ "$(field .forgejo.pkceEnabled)" = false ] && [ "$(field .grafana.pkceEnabled)" = true ] || fail "first: PKCE"
-  [ "$(field .grafana.isPublic)" = false ] || fail "first: grafana is public"
-  [ "$(jq -cS .nextcloud "$clients")" = "$hand" ] || fail "first: hand-made client changed"
+  [ "$(introspect forgejo "$forgejo_secret")" = 200 ] || fail "first: Pocket ID refuses forgejo's file"
+  [ "$(introspect grafana "$grafana_secret")" = 200 ] || fail "first: Pocket ID refuses grafana's file"
+  [ "$(introspect forgejo "$lost")" = 401 ] || fail "first: the leftover's secret still works"
+  [ "$(secrets forgejo)" = 1 ] && [ "$(secrets grafana)" = 1 ] || fail "first: more than one secret"
+  [ "$(client forgejo .name)" = Forgejo ] || fail "first: forgejo's name"
+  [ "$(client forgejo '.callbackURLs | join(" ")')" = https://git.example.com/user/oauth2/pocket-id/callback ] || fail "first: forgejo's redirect URIs"
+  [ "$(client forgejo .pkceEnabled)" = false ] && [ "$(client grafana .pkceEnabled)" = true ] || fail "first: PKCE"
+  [ "$(client grafana .isPublic)" = false ] || fail "first: grafana is public"
+  [ "$(client "$hand" 'del(.credentials)')" = "$(cat hand.json)" ] || fail "first: hand-made client changed"
   [ "$(cat declared.json)" = '["forgejo","grafana"]' ] || fail "first: declared ids $(cat declared.json)"
   [ "$(cat systemctl.log)" = "try-restart --no-block -- forgejo-oidc.service podman-grafana.service" ] || fail "first: systemctl $(cat systemctl.log)"
-  if grep -qF -e "$forgejo_secret" -e "$grafana_secret" -e api-key-0123456789abcdef out err; then fail "first: a secret in the output"; fi
+  if grep -qF -e "$forgejo_secret" -e "$grafana_secret" -e "$key" out err; then fail "first: a secret in the output"; fi
 
-  # A setting made in the admin UI that the spec does not name.
-  jq '.grafana.isGroupRestricted = true | .grafana.launchURL = "https://status.example.com"' "$clients" > c.json
-  mv c.json "$clients"
+  # Settings made in the admin UI that the spec does not name.
+  client grafana '. + {isGroupRestricted: true, launchURL: "https://status.example.com", accessTokenDurationMinutes: 30}' > change.json
+  [ "$(api PUT /api/oidc/clients/grafana "$(cat change.json)")" = 200 ] || fail "admin UI: $(cat api.json)"
 
   # Again: nothing to do. The secrets are checked, not replaced, and
   # nothing is written or restarted.
-  cp -p secrets/forgejo-oidc-client-secret forgejo-before
   run || { cat out err; fail "again: failed"; }
   [ "$(cat secrets/forgejo-oidc-client-secret)" = "$forgejo_secret" ] || fail "again: secret replaced"
   [ "$(cat secrets/grafana-oidc-client-secret)" = "$grafana_secret" ] || fail "again: secret replaced"
   [ ! -s systemctl.log ] || fail "again: restarted $(cat systemctl.log)"
-  requested "POST /api/oidc/introspect" || fail "again: secrets not checked"
-  if grep -q '^\(PUT\|DELETE\)\|/secret$\|^POST /api/oidc/clients$' fake/requests; then fail "again: wrote $(cat fake/requests)"; fi
+  grep -qx "POST /api/oidc/introspect" requests || fail "again: secrets not checked"
+  if wrote; then fail "again: wrote to Pocket ID"; fi
 
   # A changed redirect URI: Grafana's client follows, the secret and the
   # admin UI's settings stay, and nothing is restarted.
   spec grafana https://grafana.example.com/login/generic_oauth
   run || { cat out err; fail "uri: failed"; }
-  [ "$(field '.grafana.callbackURLs | join(" ")')" = https://grafana.example.com/login/generic_oauth ] || fail "uri: not updated"
-  [ "$(field .grafana.isGroupRestricted)" = true ] || fail "uri: group restriction lost"
-  [ "$(field .grafana.launchURL)" = https://status.example.com ] || fail "uri: launch URL lost"
-  [ "$(field .grafana.secret)" = "$grafana_secret" ] || fail "uri: secret changed"
+  [ "$(wrote)" = "PUT /api/oidc/clients/grafana" ] || fail "uri: wrote $(wrote)"
+  [ "$(client grafana '.callbackURLs | join(" ")')" = https://grafana.example.com/login/generic_oauth ] || fail "uri: not updated"
+  [ "$(client grafana .isGroupRestricted)" = true ] || fail "uri: group restriction lost"
+  [ "$(client grafana .launchURL)" = https://status.example.com ] || fail "uri: launch URL lost"
+  [ "$(client grafana .accessTokenDurationMinutes)" = 30 ] || fail "uri: token lifetime lost"
+  [ "$(introspect grafana "$grafana_secret")" = 200 ] || fail "uri: secret no longer works"
   [ ! -s systemctl.log ] || fail "uri: restarted $(cat systemctl.log)"
 
-  # An emptied secret file gets a new secret; only Forgejo is restarted.
+  # An emptied secret file gets a new secret, the old one stops working,
+  # and only Forgejo is restarted.
   rm -f secrets/forgejo-oidc-client-secret
   : > secrets/forgejo-oidc-client-secret
   run || { cat out err; fail "emptied: failed"; }
   new=$(cat secrets/forgejo-oidc-client-secret)
   [ -n "$new" ] && [ "$new" != "$forgejo_secret" ] || fail "emptied: no new secret"
-  [ "$(field .forgejo.secret)" = "$new" ] || fail "emptied: file is not Pocket ID's secret"
+  [ "$(introspect forgejo "$new")" = 200 ] || fail "emptied: Pocket ID refuses the new secret"
+  [ "$(introspect forgejo "$forgejo_secret")" = 401 ] || fail "emptied: the old secret still works"
+  [ "$(secrets forgejo)" = 1 ] || fail "emptied: $(secrets forgejo) secrets"
   [ "$(cat systemctl.log)" = "try-restart --no-block -- forgejo-oidc.service" ] || fail "emptied: systemctl $(cat systemctl.log)"
 
-  # A secret Pocket ID no longer takes, as after it was made again in the
-  # admin UI, gets a new one too.
-  jq '.grafana.secret = "made-in-the-ui"' "$clients" > c.json # public-check: fake
-  mv c.json "$clients"
+  # A secret Pocket ID refuses, deleted in the admin UI, gets a new one.
+  api GET /api/oidc/clients/grafana/secrets > /dev/null
+  [ "$(api DELETE "/api/oidc/clients/grafana/secrets/$(jq -r '.[0].id' api.json)")" = 204 ] || fail "refused: $(cat api.json)"
+  [ "$(introspect grafana "$grafana_secret")" = 401 ] || fail "refused: Pocket ID still takes the secret"
   run || { cat out err; fail "refused: failed"; }
-  [ "$(cat secrets/grafana-oidc-client-secret)" != "$grafana_secret" ] || fail "refused: secret kept"
-  [ "$(field .grafana.secret)" = "$(cat secrets/grafana-oidc-client-secret)" ] || fail "refused: file is not Pocket ID's secret"
+  new=$(cat secrets/grafana-oidc-client-secret)
+  [ "$new" != "$grafana_secret" ] || fail "refused: secret kept"
+  [ "$(introspect grafana "$new")" = 200 ] || fail "refused: Pocket ID refuses the new secret"
   [ "$(cat systemctl.log)" = "try-restart --no-block -- podman-grafana.service" ] || fail "refused: systemctl $(cat systemctl.log)"
 
   # Grafana no longer declared: its client goes, its files and the
   # hand-made client stay.
   spec
   run || { cat out err; fail "removed: failed"; }
-  [ "$(field 'has("grafana")')" = false ] || fail "removed: grafana still in Pocket ID"
-  [ "$(field 'has("forgejo")')" = true ] || fail "removed: forgejo gone"
-  [ "$(jq -cS .nextcloud "$clients")" = "$hand" ] || fail "removed: hand-made client changed"
+  [ "$(api GET /api/oidc/clients/grafana)" = 404 ] || fail "removed: grafana still in Pocket ID"
+  [ "$(client forgejo .id)" = forgejo ] || fail "removed: forgejo gone"
+  [ "$(client "$hand" 'del(.credentials)')" = "$(cat hand.json)" ] || fail "removed: hand-made client changed"
   [ -s secrets/grafana-oidc-client-secret ] || fail "removed: grafana's secret file deleted"
   [ "$(cat declared.json)" = '["forgejo"]' ] || fail "removed: declared ids $(cat declared.json)"
 
   # A wrong API key fails and changes nothing.
   echo wrong-key-0123456789 > bad-key # public-check: fake
-  cp "$clients" before.json
+  spec grafana
   if run bad-key; then fail "bad key: succeeded"; fi
   grep -q "answered 401" err || fail "bad key: no message: $(cat err)"
-  cmp -s before.json "$clients" || fail "bad key: clients changed"
+  [ "$(api GET /api/oidc/clients/grafana)" = 404 ] || fail "bad key: grafana made"
+  [ "$(cat declared.json)" = '["forgejo"]' ] || fail "bad key: declared ids $(cat declared.json)"
 
   # A Pocket ID that does not answer fails after its tries.
-  touch fake/down
-  if run; then fail "down: succeeded"; fi
+  if run api-key "$PWD/nothing.sock"; then fail "down: succeeded"; fi
   grep -q "did not answer" err || fail "down: no message: $(cat err)"
-  rm fake/down
 
-  kill "$fake"
+  kill "$pid"
   touch $out
 ''

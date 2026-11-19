@@ -241,9 +241,11 @@
         # The script writing tsidp's declared clients, against a fake state
         # directory.
         tsidp-clients = pkgs.callPackage ./tests/tsidp-clients.nix { };
-        # The script declaring Pocket ID's clients, against a stand-in for
-        # its admin API and a stubbed systemctl.
-        pocket-id-clients = pkgs.callPackage ./tests/pocket-id-clients.nix { };
+        # The script declaring Pocket ID's clients, against nixpkgs' Pocket
+        # ID with the example's settings, and a stubbed systemctl.
+        pocket-id-clients = pkgs.callPackage ./tests/pocket-id-clients.nix {
+          inherit (exampleServerPocketId.config.services.pocket-id) package settings;
+        };
         # The example server's Pocket ID with two clients declared: the
         # spec the unit gets, its ordering before the clients' units, the
         # socket Caddy mounts and the backup.

@@ -8,6 +8,7 @@
 #   as credentials and pocket-id-keys before it;
 # - its settings come from the environment, and users cannot edit their
 #   own accounts;
+# - its actor runtime listens on loopback only;
 # - the socket's directory is the caddy group's, writable for Pocket ID and
 #   mounted into the caddy container;
 # - pocket-id-clients runs after Pocket ID and before the clients' units,
@@ -15,8 +16,8 @@
 # - the spec has each client with its files and owner as "user:group";
 # - the example backs up the database with a consistent copy.
 #
-# It cannot sign anyone in: the clients script has its own check against a
-# stand-in, and Pocket ID itself is tested by hand.
+# It cannot sign anyone in: the clients script has its own check against
+# nixpkgs' Pocket ID, and signing in is tested by hand.
 { lib, runCommand, jq, config }:
 
 let
@@ -37,6 +38,7 @@ let
     ++ lib.optional (!pocketId.settings.TRUST_PROXY) "Pocket ID does not trust Caddy's X-Forwarded-For"
     ++ lib.optional ((pocketId.settings.UI_CONFIG_DISABLED or false) != true) "Pocket ID takes its settings from the admin UI"
     ++ lib.optional ((pocketId.settings.ALLOW_OWN_ACCOUNT_EDIT or true) != false) "Pocket ID lets users edit their own accounts"
+    ++ lib.optional ((pocketId.settings.ACTORS_HOST or null) != "127.0.0.1") "Pocket ID's actor runtime listens beyond loopback"
     ++ lib.optional (pocketId.credentials != { ENCRYPTION_KEY = cfg.encryptionKeyFile; STATIC_API_KEY = cfg.apiKeyFile; })
       "Pocket ID's credentials are ${builtins.toJSON pocketId.credentials}"
     ++ lib.optional (!(lib.elem "pocket-id-keys.service" service.requires && lib.elem "pocket-id-keys.service" service.after))
