@@ -72,4 +72,4 @@ never reaches the workers.
   site's OIDC provider (Accepted)
 - [ADR-0019](0019-forgejo-and-grafana-on-pocket-id.md): Forgejo and
   Grafana choose their OIDC provider, and keep existing users on a switch
-  (Proposed)
+  (Accepted)

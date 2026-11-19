@@ -6,6 +6,11 @@ let
   oidc = cfg.grafanaOidc;
   pocketId = config.homelab.pocketId;
   onPocketId = oidc.provider == "pocket-id";
+  # Users cannot change their own username or email in Pocket ID: its
+  # settings come from the environment, and own-account editing is off.
+  pocketIdSettings = config.services.pocket-id.settings;
+  pocketIdOwnEditOff = (pocketIdSettings.UI_CONFIG_DISABLED or false) == true
+    && (pocketIdSettings.ALLOW_OWN_ACCOUNT_EDIT or true) == false;
 
   # The forms of the admins' logins in tsidp's email claim: the login, and
   # for GitHub and passkey logins the login with tsidp's host name appended
@@ -209,6 +214,13 @@ in
         assertion = lib.any (c: c.idFile == oidc.clientIdFile && c.secretFile == oidc.clientSecretFile
           && c.owner == "grafana" && lib.elem "podman-grafana.service" c.units) (lib.attrValues pocketId.clients);
         message = "homelab.observability.grafanaOidc.provider is pocket-id: declare Grafana's client in homelab.pocketId.clients, with idFile ${oidc.clientIdFile}, secretFile ${oidc.clientSecretFile}, owner grafana and podman-grafana.service among its units (docs/pocket-id.md).";
+      }
+      {
+        # Grafana matches its admins, and looks existing users up, by the
+        # email claim, which a user who edits their own account could set
+        # to an address no account holds.
+        assertion = !pocketId.enable || pocketIdOwnEditOff;
+        message = "homelab.observability.grafanaOidc.provider is pocket-id, which matches users by email, but Pocket ID lets users change their own email; turn homelab.pocketId.allowOwnAccountEdit off (docs/adr/0019-forgejo-and-grafana-on-pocket-id.md).";
       }
     ] else [
       {
@@ -426,7 +438,9 @@ in
         # by email only with this. Pocket ID's ids are not tsidp's, so
         # after a switch an existing user with the same email is taken
         # over, keeping its preferences and stars, instead of a second user
-        # being made. Only the admins sign in at all, by the same claim
+        # being made. Only the admins sign in at all, by the same claim.
+        # Safe only because Pocket ID's users cannot change their own email,
+        # which an assertion above holds
         # (docs/adr/0019-forgejo-and-grafana-on-pocket-id.md).
         GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP = "true";
       } else if cfg.grafanaProxyAuth.enable then {

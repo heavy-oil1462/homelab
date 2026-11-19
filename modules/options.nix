@@ -917,6 +917,21 @@ in
           403 there. Needs homelab.reverseProxy.tailscaleIdentity.enable.
         '';
       };
+      allowOwnAccountEdit = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Let users change their own username, email and name in Pocket ID.
+          Off, only the admin changes them, in the admin UI's Users page,
+          and a user cannot take a username or email no one holds, which
+          apps such as Grafana match accounts on. Grafana on Pocket ID
+          (homelab.observability.grafanaOidc) needs it off
+          (docs/adr/0019-forgejo-and-grafana-on-pocket-id.md). Pocket ID's
+          application settings then come from its environment
+          (UI_CONFIG_DISABLED) and its admin UI shows them read-only; set
+          others in services.pocket-id.settings by their environment names.
+        '';
+      };
       dataDir = lib.mkOption {
         type = lib.types.str;
         default = "/var/lib/pocket-id";

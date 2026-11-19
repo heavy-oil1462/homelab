@@ -5,6 +5,8 @@
 #
 # - Pocket ID serves on its socket at homelab.pocketId.url, with its keys
 #   as credentials and pocket-id-keys before it;
+# - its settings come from the environment, and users cannot edit their
+#   own accounts;
 # - the socket's directory is the caddy group's, writable for Pocket ID and
 #   mounted into the caddy container;
 # - pocket-id-clients runs after Pocket ID and before the clients' units,
@@ -32,6 +34,8 @@ let
     ++ lib.optional (pocketId.settings.APP_URL != cfg.url) "APP_URL is ${pocketId.settings.APP_URL}, not homelab.pocketId.url"
     ++ lib.optional ((pocketId.settings.UNIX_SOCKET or null) != cfg.socket) "Pocket ID does not serve on ${cfg.socket}"
     ++ lib.optional (!pocketId.settings.TRUST_PROXY) "Pocket ID does not trust Caddy's X-Forwarded-For"
+    ++ lib.optional ((pocketId.settings.UI_CONFIG_DISABLED or false) != true) "Pocket ID takes its settings from the admin UI"
+    ++ lib.optional ((pocketId.settings.ALLOW_OWN_ACCOUNT_EDIT or true) != false) "Pocket ID lets users edit their own accounts"
     ++ lib.optional (pocketId.credentials != { ENCRYPTION_KEY = cfg.encryptionKeyFile; STATIC_API_KEY = cfg.apiKeyFile; })
       "Pocket ID's credentials are ${builtins.toJSON pocketId.credentials}"
     ++ lib.optional (!(lib.elem "pocket-id-keys.service" service.requires && lib.elem "pocket-id-keys.service" service.after))

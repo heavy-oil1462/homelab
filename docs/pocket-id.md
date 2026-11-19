@@ -73,8 +73,20 @@ Pocket ID refuses the setup itself.
    `pocket-id` user, in `/var/lib/pocket-id`, with the unit's environment)
    prints a one-time sign in link.
 
-Other users are added in the admin UI (Users, then a signup link or a new
-user), and register their own passkeys.
+Other users are added in the admin UI (Users, then a new user), and
+register their own passkeys. Users cannot change their own name, username
+or email: the admin does, in Users, for every account including their
+own. Apps match accounts on the username and email, so this keeps a user
+from taking an address no account holds
+([ADR-0019](adr/0019-forgejo-and-grafana-on-pocket-id.md)).
+`homelab.pocketId.allowOwnAccountEdit` allows it again, but Grafana on
+Pocket ID then does not build.
+
+Pocket ID's application settings come from the host's config
+(`UI_CONFIG_DISABLED`); its admin UI shows them read-only. Set one by its
+environment name in `services.pocket-id.settings`, such as
+`ALLOW_USER_SIGNUPS = "withToken";` for sign up links, which let the new
+user choose their own email once.
 
 ## Clients
 
@@ -129,7 +141,8 @@ The apps match the owner's existing account like this
 - Grafana: the `email` claim is the user's login and email, and the
   addresses in `homelab.observability.grafanaOidc.admins` get Admin.
   Grafana looks an existing user up by that email, so a user whose email
-  is the owner's Pocket ID email is kept.
+  is the owner's Pocket ID email is kept. Both are safe because users
+  cannot change their own email in Pocket ID.
 - cue, fyr, podium and vaka sign in through dev/oidc; which claim each
   matches on is set when it moves to Pocket ID.
 
@@ -140,9 +153,9 @@ Each service picks its provider, `tsidp` by default:
 `homelab.observability.grafanaOidc.provider`. Switch them one at a time
 or together, once Pocket ID runs and the owner's account exists (above).
 
-1. Make the owner's Pocket ID account match: its username is the owner's
-   Forgejo user name, and its email is the email of the owner's Grafana
-   user (Grafana, Profile). If the Grafana email is tsidp's form, such as
+1. Make the owner's Pocket ID account match, in Pocket ID's admin UI under
+   Users: its username is the owner's Forgejo user name, and its email is
+   the email of the owner's Grafana user (Grafana, Profile). If the Grafana email is tsidp's form, such as
    `alice@github.idp.<tailnet>.ts.net`, keep the real address in Pocket
    ID; Grafana then makes a new user, as below.
 2. Know the password of the owner's Forgejo account. If it is forgotten,
@@ -185,8 +198,9 @@ or together, once Pocket ID runs and the owner's account exists (above).
    };
    ```
 
-   The host does not build if Pocket ID is off, a client is missing or a
-   tsidp issuer is left. `examples/server.nix` declares the clients from
+   The host does not build if Pocket ID is off, a client is missing, a
+   tsidp issuer is left, or, for Grafana, Pocket ID lets users edit their
+   own accounts. `examples/server.nix` declares the clients from
    the options this way, and `examples/server-pocket-id.nix` switches
    both services.
 4. Rebuild. `pocket-id-clients` creates both clients, writes their id and

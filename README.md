@@ -105,7 +105,7 @@ Services (OCI containers, pinned by digest):
   (docs/adr/0006-tsidp-for-oidc-sign-in.md,
   docs/adr/0010-tsidp-clients-declared-in-nix.md). With Pocket ID,
   Grafana also finds an existing user by email, so a switch keeps the
-  owner's user; [docs/pocket-id.md](docs/pocket-id.md) has the switch
+  owner's user, and needs Pocket ID's own-account editing off; [docs/pocket-id.md](docs/pocket-id.md) has the switch
   (docs/adr/0019-forgejo-and-grafana-on-pocket-id.md). Dashboards in
   `homelab.observability.dashboardsDir` are provisioned read-only into the
   Homelab folder and change with a rebuild. With
@@ -328,8 +328,10 @@ System:
   Pocket ID answers, the `pocket-id-clients` unit creates or updates each
   through its admin API, writes its id and the secret Pocket ID makes to
   its files under `/var/lib/secrets`, and restarts its `units`, which
-  start after it. Clients added in the admin UI are left alone. The
-  example declares Forgejo's and Grafana's from their OIDC options once
+  start after it. Clients added in the admin UI are left alone. Its
+  application settings come from the config, with users' own-account
+  editing off (`homelab.pocketId.allowOwnAccountEdit`); set others in
+  `services.pocket-id.settings`. The example declares Forgejo's and Grafana's from their OIDC options once
   their provider is `pocket-id`.
 
 ## Logs

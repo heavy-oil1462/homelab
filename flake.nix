@@ -211,7 +211,8 @@
         # vulnerability rules alert on what they should.
         alert-rules = pkgs.callPackage ./tests/alert-rules.nix { };
         # Forgejo's and Grafana's OIDC sign in on tsidp, the example server's,
-        # and on Pocket ID, and the assertions that refuse a half-done switch.
+        # and on Pocket ID, and the assertions that refuse a half-done switch
+        # or Grafana on a Pocket ID whose users edit their own email.
         oidc-providers = pkgs.callPackage ./tests/oidc-providers.nix {
           tsidp = exampleServer.config;
           pocketId = exampleServerPocketId.config;
@@ -222,6 +223,10 @@
             {
               noPocketId = with' exampleServerPocketId { homelab.pocketId.enable = nixpkgs.lib.mkForce false; };
               noClients = with' exampleServerPocketId { homelab.pocketId.clients = nixpkgs.lib.mkForce { }; };
+              ownEdit = with' exampleServerPocketId { homelab.pocketId.allowOwnAccountEdit = true; };
+              ownEditDirect = with' exampleServerPocketId {
+                services.pocket-id.settings.ALLOW_OWN_ACCOUNT_EDIT = nixpkgs.lib.mkForce true;
+              };
               tsidpIssuer = with' exampleServerPocketId {
                 homelab.forgejo.oidc.issuer = nixpkgs.lib.mkOverride 10 "https://idp.tailnet.invalid";
               };

@@ -10,10 +10,11 @@
 #   after preferred_username, Grafana uses Pocket ID's endpoints, matches
 #   the admins' emails and looks existing users up by email, and both
 #   clients are declared in homelab.pocketId.clients, written before the
-#   services' units;
+#   services' units, and Pocket ID's users cannot change their own email;
 # - Forgejo links an existing account only with its password on both;
-# - choosing Pocket ID without it, or without the service's client, and
-#   tsidp without an issuer, fail the build with a clear message.
+# - choosing Pocket ID without it, or without the service's client, Grafana
+#   on Pocket ID while users may edit their own accounts, and tsidp without
+#   an issuer, fail the build with a clear message.
 #
 # It cannot sign anyone in: the forgejo-oidc check runs the script's
 # update path, and sign in against a real provider is tested by hand.
@@ -80,6 +81,10 @@ let
     ++ expect "pocket-id: Grafana's role path"
       "contains(['alice@example.com'], email) && 'Admin'"
       (grafanaEnv pocketId).GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH
+    ++ expect "pocket-id: Pocket ID's settings from the environment" true
+      pocketId.services.pocket-id.settings.UI_CONFIG_DISABLED
+    ++ expect "pocket-id: own-account editing" false
+      pocketId.services.pocket-id.settings.ALLOW_OWN_ACCOUNT_EDIT
     ++ expectElem "pocket-id: Grafana starts after" "pocket-id-clients.service" pocketId.systemd.services.podman-grafana.after
     ++ expect "pocket-id: tsidp's clients" [ ] (lib.attrNames pocketId.homelab.tsidp.clients)
     ++ expect "pocket-id: Forgejo's client"
@@ -110,6 +115,10 @@ let
     ++ expectFailure "Grafana on Pocket ID without it" "homelab.observability.grafanaOidc.provider is pocket-id, but homelab.pocketId is not enabled" broken.noPocketId
     ++ expectFailure "Forgejo on Pocket ID without its client" "declare Forgejo's client in homelab.pocketId.clients" broken.noClients
     ++ expectFailure "Grafana on Pocket ID without its client" "declare Grafana's client in homelab.pocketId.clients" broken.noClients
+    ++ expectFailure "Grafana on Pocket ID with own-account editing" "turn homelab.pocketId.allowOwnAccountEdit off" broken.ownEdit
+    ++ expectFailure "Grafana on Pocket ID with own-account editing set directly" "turn homelab.pocketId.allowOwnAccountEdit off" broken.ownEditDirect
+    ++ expect "Forgejo on Pocket ID with own-account editing" [ ]
+      (lib.filter (lib.hasPrefix "homelab.forgejo") (failed broken.ownEdit))
     ++ expectFailure "Forgejo on Pocket ID with tsidp's issuer" "homelab.forgejo.oidc.issuer is ${idp}, but with Pocket ID it is ${id}" broken.tsidpIssuer
     ++ expectFailure "Forgejo on tsidp without an issuer" "homelab.forgejo.oidc.provider is tsidp, which needs homelab.forgejo.oidc.issuer" broken.noIssuer
     ++ expectFailure "Grafana on tsidp without an issuer" "homelab.observability.grafanaOidc.provider is tsidp, which needs homelab.observability.grafanaOidc.issuer" broken.noIssuer

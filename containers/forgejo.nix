@@ -266,7 +266,9 @@ in
       # ID's preferred_username is the account's username, unique there. An
       # existing account with that name or email is linked only after its
       # password is given: users can add email addresses to their Forgejo
-      # accounts, and change their own username and email in Pocket ID.
+      # accounts, and a name or email that no Pocket ID account holds may
+      # still be given to a new one, or taken by a user editing their own
+      # (homelab.pocketId.allowOwnAccountEdit).
       FORGEJO__oauth2_client__USERNAME =
         if oidc.provider == "pocket-id" then "preferred_username" else "email";
       FORGEJO__oauth2_client__ACCOUNT_LINKING = "login";

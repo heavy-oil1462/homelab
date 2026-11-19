@@ -1,6 +1,6 @@
 # ADR-0019: Forgejo and Grafana choose their OIDC provider, and keep existing users on a switch
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 
@@ -31,7 +31,17 @@ images:
 - Pocket ID 2.7.0 keeps usernames (case-insensitive) and emails unique,
   makes users only through its admin (sign ups are off by default), and
   by default lets each user change their own username and email
-  (`allowOwnAccountEdit`). A username may contain `@`.
+  (`allowOwnAccountEdit`, `PUT /api/users/me`). A username may contain
+  `@`. Its application settings live in the database and are edited in
+  the admin UI; with `UI_CONFIG_DISABLED` they come from the environment
+  instead (`ALLOW_OWN_ACCOUNT_EDIT` and so on, defaults for the rest), and
+  the UI shows them read-only. The admin still edits every user, its own
+  account included, through `PUT /api/users/<id>`.
+
+A user who edits their own account cannot take an email another account
+holds, but can take one no account holds: an admin's old address, or one
+listed by mistake. Wherever an app matches accounts or roles by email,
+that is a way in.
 
 ## Decision
 
@@ -56,13 +66,21 @@ images:
   with their password after a switch; `docs/pocket-id.md` gives the
   owner's steps, and how the admin sets a password for an account that
   has none.
+- **Pocket ID's users do not edit their own accounts.** The pocket-id
+  module sets `UI_CONFIG_DISABLED` and `ALLOW_OWN_ACCOUNT_EDIT=false`, so
+  only the admin changes a username or email.
+  `homelab.pocketId.allowOwnAccountEdit` turns editing back on. Pocket ID's
+  other application settings keep their defaults, sign ups disabled
+  among them, unless the host sets them in `services.pocket-id.settings`.
 - **Grafana** looks existing users up by email with Pocket ID
   (`oauth_allow_insecure_email_lookup`), so the owner's user, with its
   preferences, is kept when its email is their Pocket ID email. Users stay
   keyed by the email claim, and the admins are listed by their Pocket ID
   emails, matched as they are; everyone else is still refused
-  (`role_attribute_strict`). The endpoints are Pocket ID's
-  (`/authorize`, `/api/oidc/token`, `/api/oidc/userinfo`).
+  (`role_attribute_strict`). Both rest on users not editing their own
+  email, so a host with Grafana on Pocket ID does not build while Pocket
+  ID's settings allow it. The endpoints are Pocket ID's (`/authorize`,
+  `/api/oidc/token`, `/api/oidc/userinfo`).
 
 ## Consequences
 
@@ -73,18 +91,24 @@ images:
 - The owner's first Pocket ID sign in to Forgejo ends on Forgejo's link
   page, once. An account without a password needs one set by the admin
   first.
-- Grafana's email lookup adds no way in: only the listed admins sign in,
-  by the same claim. The admin list must hold only emails that Pocket ID
-  accounts have, since a Pocket ID user can change their own email to
-  one nobody holds; the same goes for the role, with or without the
-  lookup. Turning off own-account editing in Pocket ID closes it.
+- With own-account editing off, an email reaches Grafana only as the
+  admin set it, so the email lookup and the admin list are as safe as the
+  admin's own care: list only emails that Pocket ID accounts hold.
+- Users change their own name, username and email through the admin.
+  Settings changed in Pocket ID's admin UI before this are replaced by
+  the environment's, Pocket ID's defaults unless the host sets them in
+  `services.pocket-id.settings`. Passkeys stay the users' own.
+- Sign ups (`ALLOW_USER_SIGNUPS`) let a new user choose their email once,
+  at sign up. They stay disabled unless the host turns them on; with a
+  token, the admin chooses who signs up.
 - Grafana's dashboards, folders, alert rules and data sources belong to
   the organisation, not a user, so a user made anew loses only its own
   preferences and stars.
 - Switching back to tsidp works the same way, and finds the links made
   with tsidp again.
 - The `oidc-providers` check evaluates both providers on both services
-  and the assertions; the `forgejo-oidc` check runs the switch against
+  and the assertions, own-account editing among them; the
+  `pocket-id-module` check holds Pocket ID's settings; the `forgejo-oidc` check runs the switch against
   its stub. Sign in against a real Pocket ID is tested by hand.
 
 Related: [ADR-0006](0006-tsidp-for-oidc-sign-in.md),
