@@ -142,15 +142,17 @@ Services (OCI containers, pinned by digest):
   device registry moves to a storage version the older release cannot
   read. Back up first (an HA backup, or a copy of `/config`); to go back,
   restore `/config/.storage` from that backup along with the older pin.
-  The recorder database is unchanged. From 2026.8, the first start reads
-  the `http:` block of `configuration.yaml` into `.storage/http` and
-  ignores it from then on: change trusted proxies under Settings > System >
-  Network, not in the file. Where the stored config already matches the
-  file, as on a host upgraded from 2026.6 that has run with the same
-  `http:` block, it is taken over as it is. Otherwise, such as on a new
-  host, it is applied as a trial: confirm it within five minutes in the
-  network settings, or Home Assistant restarts without the reverse proxy
-  settings and answers the proxy with 400. Automations that use a trigger
+  The recorder database is unchanged. From 2026.8, Home Assistant keeps
+  its HTTP settings in `.storage/http` and reads the `http:` block of
+  `configuration.yaml` only once; 2027.2 drops the block. Set the reverse
+  proxies in `homelab.homeassistant.trustedProxies` instead and remove the
+  block: the `home-assistant-http` unit writes them, with
+  `use_x_forwarded_for`, into the store before every start of the
+  container, keeps the other settings stored there, and needs no trial.
+  The module refuses an `http:` block while the option is set. Changes
+  to the proxies in the network settings last until the container next
+  starts (docs/adr/0022-home-assistant-http-settings-after-the-yaml.md).
+  Automations that use a trigger
   renamed in 2026.7 stop working until edited; they show under Repairs.
 - `nextcloud`: Nextcloud All-in-One mastercontainer, pinned by digest. Its
   admin UI (8080) and the Apache container it starts (11000) bind to

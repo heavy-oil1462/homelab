@@ -725,6 +725,27 @@ in
         type = lib.types.path;
         description = "Home Assistant scripts.yaml; __DOMAIN__ is templated.";
       };
+      trustedProxies = lib.mkOption {
+        type = lib.types.nullOr (lib.types.listOf lib.types.str);
+        default = null;
+        example = [ "10.88.255.2/32" ];
+        description = ''
+          The reverse proxies Home Assistant takes X-Forwarded-For from, as
+          addresses or networks, as Home Assistant sees them connect.
+          Home Assistant logs the address of a proxy it does not trust
+          ("Received X-Forwarded-For header from an untrusted proxy") and
+          answers it with 400.
+
+          The module writes them, with use_x_forwarded_for, into Home
+          Assistant's .storage/http before the container starts, and keeps
+          every other setting stored there
+          (docs/adr/0022-home-assistant-http-settings-after-the-yaml.md).
+          An empty list turns reverse proxy support off. configurationFile
+          must then have no http: block. null leaves the settings to
+          configuration.yaml, until Home Assistant 2027.2 drops it, and to
+          its network settings.
+        '';
+      };
     };
 
     nvr.configFile = lib.mkOption {

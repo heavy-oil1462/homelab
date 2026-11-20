@@ -197,6 +197,10 @@
       configurationFile = ./assets/homeassistant/configuration.yaml;
       automationsFile = ./assets/homeassistant/automations.yaml;
       scriptsFile = ./assets/homeassistant/scripts.yaml;
+      # The caddy container, as Home Assistant on the host network sees it
+      # connect. Written into .storage/http before HA starts
+      # (docs/adr/0022-home-assistant-http-settings-after-the-yaml.md).
+      trustedProxies = [ "${config.homelab.reverseProxy.address}/32" ];
     };
     nvr.configFile = ./assets/frigate.yaml;
     forgejo = {

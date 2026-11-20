@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   domain = config.homelab.domain;
@@ -10,9 +10,50 @@ let
   haFile = name: path: pkgs.writeText name (
     builtins.replaceStrings [ "__DOMAIN__" ] [ domain ] (builtins.readFile path)
   );
+
+  # The reverse proxy settings, merged into .storage/http before Home
+  # Assistant starts, which applies the stored config without a trial
+  # (docs/adr/0022-home-assistant-http-settings-after-the-yaml.md).
+  httpTool = pkgs.callPackage ../modules/homeassistant-http.nix { };
+  httpSettings = pkgs.writeText "homeassistant-http.json" (builtins.toJSON {
+    use_x_forwarded_for = cfg.trustedProxies != [ ];
+    trusted_proxies = cfg.trustedProxies;
+  });
+  yamlHasHttp = lib.any (lib.hasPrefix "http:")
+    (lib.splitString "\n" (builtins.readFile cfg.configurationFile));
 in
 {
   imports = [ ../modules/options.nix ];
+
+  assertions = lib.optional (cfg.trustedProxies != null) {
+    assertion = !yamlHasHttp;
+    message = ''
+      homelab.homeassistant.trustedProxies sets Home Assistant's reverse
+      proxy settings in .storage/http; remove the http: block from
+      homelab.homeassistant.configurationFile, which Home Assistant would
+      otherwise take over as a trial or ignore.
+    '';
+  };
+
+  # Wanted by the container's unit, so it runs on every start of the
+  # container, before it. A failure leaves the stored settings as they were
+  # and Home Assistant starts with them; the unit shows as failed.
+  systemd.services.home-assistant-http = lib.mkIf (cfg.trustedProxies != null) {
+    description = "Home Assistant's reverse proxy settings in .storage/http";
+    wantedBy = [ "podman-home-assistant.service" ];
+    before = [ "podman-home-assistant.service" ];
+    path = [ config.virtualisation.podman.package ];
+    serviceConfig.Type = "oneshot";
+    script = ''
+      podman volume exists homeassistant-config || podman volume create homeassistant-config
+      dir=$(podman volume inspect --format '{{.Mountpoint}}' homeassistant-config)
+      exec ${httpTool}/bin/homeassistant-http "$dir/.storage/http" ${httpSettings}
+    '';
+  };
+  # A change of the settings restarts the container, and with it the unit
+  # above; Home Assistant reads .storage/http only when it starts.
+  systemd.services.podman-home-assistant.restartTriggers =
+    lib.mkIf (cfg.trustedProxies != null) [ httpTool httpSettings ];
 
   # The secrets.yaml that !secret reads, provisioned out of band at
   # /var/lib/secrets/homeassistant-secrets.yaml, root:root 0400; the
