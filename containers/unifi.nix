@@ -73,7 +73,7 @@ in
     # does not support skipping major versions on upgrade and UniFi caps the
     # supported server version; bump majors deliberately.
     unifi-db = {
-      image = "docker.io/library/mongo@sha256:bdc216e9d5a6ec2cfdac789b5832fdab64cd32055f59885cae918a92de63c361"; # 8.0.38, :8.0 as of 2026-11-18
+      image = "docker.io/library/mongo@sha256:479e85ced54ffb8a40dade1dcde2da2a9ae858515b9415e9cc54bfb8f0575d01"; # 8.0.38, :8.0 as of 2026-11-20
       autoStart = true;
       user = "${toString config.users.users.unifi-db.uid}:${toString config.users.groups.unifi-db.gid}";
       ports = [ "127.0.0.1:27017:27017" ];
