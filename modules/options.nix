@@ -12,62 +12,58 @@ let
   # It has no comma, so the OIDC gate's snippets can list names in a query.
   pocketIdUsernameRegex = "[a-zA-Z0-9]([a-zA-Z0-9_.@-]*[a-zA-Z0-9])?";
 
-  # A service's sign in through an OpenID Connect provider: tsidp
-  # (docs/adr/0006-tsidp-for-oidc-sign-in.md) or Pocket ID
+  # A service's sign in through the OpenID Connect provider, Pocket ID
   # (docs/adr/0018-pocket-id-is-the-oidc-provider.md). The client id and
-  # secret are runtime files, never in the store. self is the option set
-  # itself, for the issuer's default.
-  oidcClientOptions = { service, redirect, secretPrefix, unit, self }: {
+  # secret are runtime files, never in the store.
+  oidcClientOptions = { service, redirect, secretPrefix, unit }: {
     enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
       description = ''
-        Sign in to ${service} through the OpenID Connect provider named by
-        provider, at the issuer URL. Its client has the redirect URI
-        ${redirect}. Declare it in homelab.pocketId.clients or
-        homelab.tsidp.clients, with the two files below, and the provider
-        writes its id and secret there; with another provider, register it
-        there and put them in the files by hand.
+        Sign in to ${service} through Pocket ID, at homelab.pocketId.url,
+        which must run on this host. Its client has the redirect URI
+        ${redirect}. Declare it in homelab.pocketId.clients with the two
+        files below and ${unit} among its units, and Pocket ID writes its
+        id and secret there.
       '';
     };
     provider = lib.mkOption {
-      type = lib.types.enum [ "tsidp" "pocket-id" ];
-      default = "tsidp";
+      type = lib.types.enum [ "pocket-id" ];
+      default = "pocket-id";
       description = ''
-        The provider ${service} signs in through. With tsidp (homelab.tsidp)
-        the issuer is set by hand. With pocket-id the issuer is
-        homelab.pocketId.url, Pocket ID must run on this host, and its
-        client must be declared in homelab.pocketId.clients with the two
-        files below and ${unit} among its units
-        (docs/pocket-id.md has the switch).
-      '';
-    };
-    issuer = lib.mkOption {
-      type = lib.types.nullOr (lib.types.strMatching "https://[^/]+(/.*[^/])?");
-      default = if self.provider == "pocket-id" then cfg.pocketId.url else null;
-      defaultText = lib.literalExpression ''
-        if provider == "pocket-id" then homelab.pocketId.url else null
-      '';
-      example = "https://idp.tailnet.invalid";
-      description = ''
-        The provider's issuer URL, without a trailing slash. For tsidp it is
-        https://<homelab.tsidp.hostName>.<tailnet>.ts.net and must be set.
-        For Pocket ID it is homelab.pocketId.url; leave it unset.
+        The provider ${service} signs in through. Pocket ID is the only one
+        (docs/adr/0023-tsidp-retired-pocket-id-only.md); the option stays
+        so hosts that chose it still build.
       '';
     };
     clientIdFile = lib.mkOption {
       type = lib.types.str;
       default = "/var/lib/secrets/${secretPrefix}-client-id";
-      description = "File holding ${service}'s client id, written by Pocket ID or tsidp for a declared client, or provisioned out of band.";
+      description = "File holding ${service}'s client id, written by Pocket ID for a declared client, or provisioned out of band.";
     };
     clientSecretFile = lib.mkOption {
       type = lib.types.str;
       default = "/var/lib/secrets/${secretPrefix}-client-secret";
-      description = "File holding ${service}'s client secret, made by Pocket ID or tsidp for a declared client, or provisioned out of band.";
+      description = "File holding ${service}'s client secret, made by Pocket ID for a declared client, or provisioned out of band.";
     };
   };
+
+  # Options that went with tsidp
+  # (docs/adr/0023-tsidp-retired-pocket-id-only.md).
+  tsidpRemoved = path: lib.mkRemovedOptionModule path ''
+    tsidp is removed; Pocket ID is the only OIDC provider
+    (docs/adr/0023-tsidp-retired-pocket-id-only.md). Sign in through
+    homelab.pocketId, whose URL is the issuer; docs/pocket-id.md, "Moving
+    off tsidp", has the steps.
+  '';
 in
 {
+  imports = map tsidpRemoved [
+    [ "homelab" "tsidp" ]
+    [ "homelab" "forgejo" "oidc" "issuer" ]
+    [ "homelab" "observability" "grafanaOidc" "issuer" ]
+  ];
+
   options.homelab = {
     username = lib.mkOption {
       type = lib.types.str;
@@ -691,22 +687,17 @@ in
         redirect = "https://status.<domain>/login/generic_oauth";
         secretPrefix = "grafana-oidc";
         unit = "podman-grafana.service";
-        self = cfg.observability.grafanaOidc;
       } // {
         admins = lib.mkOption {
           type = lib.types.listOf tailnetLogin;
           default = [ ];
-          example = [ "alice@github" ];
+          example = [ "alice@example.com" ];
           description = ''
             The users that sign in to Grafana, all with the Admin role in
-            the main organisation, by their email claim. Grafana refuses
-            everyone else. With tsidp they are tailnet logins: tsidp passes
-            the login as the email claim, with its own name appended to
-            GitHub and passkey logins (alice@github.idp.<tailnet>.ts.net),
-            and the module matches both forms. With Pocket ID they are the
-            emails of the users' Pocket ID accounts, which Pocket ID keeps
-            unique; list only addresses an account holds, since a user may
-            change their own email to one no one has.
+            the main organisation, by their email claim, the emails of the
+            users' Pocket ID accounts, which Pocket ID keeps unique. Grafana
+            refuses everyone else. List only addresses an account holds,
+            since a user may change their own email to one no one has.
           '';
         };
       };
@@ -882,107 +873,9 @@ in
       };
       oidc = oidcClientOptions {
         service = "Forgejo";
-        redirect = "https://git.<domain>/user/oauth2/<source>/callback, the source being tailscale with tsidp and pocket-id with Pocket ID";
+        redirect = "https://git.<domain>/user/oauth2/pocket-id/callback";
         secretPrefix = "forgejo-oidc";
         unit = "forgejo-oidc.service";
-        self = cfg.forgejo.oidc;
-      };
-    };
-
-    tsidp = {
-      enable = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = ''
-          Run tsidp, Tailscale's OpenID Connect provider, as its own tailnet
-          node, with nixpkgs' services.tsidp. Its users are the tailnet's
-          users; Forgejo and Grafana sign in through it with
-          homelab.forgejo.oidc and homelab.observability.grafanaOidc
-          (docs/adr/0006-tsidp-for-oidc-sign-in.md). It listens on its own
-          node only, never on the host's interfaces.
-        '';
-      };
-      hostName = lib.mkOption {
-        type = lib.types.strMatching "[a-z0-9]([a-z0-9-]*[a-z0-9])?";
-        default = "idp";
-        description = ''
-          tsidp's machine name on the tailnet. Its issuer URL is
-          https://<hostName>.<tailnet>.ts.net.
-        '';
-      };
-      authKeyFile = lib.mkOption {
-        type = lib.types.str;
-        default = "/var/lib/secrets/tsidp.env";
-        description = ''
-          Environment file with the Tailscale auth key tsidp joins the
-          tailnet with, as one line TS_AUTHKEY=tskey-auth-..., owned by root,
-          mode 0400. Only read while tsidp has no node state yet; tsidp does
-          not start while the file is missing.
-        '';
-      };
-      stateDir = lib.mkOption {
-        type = lib.types.str;
-        default = "/var/lib/private/tsidp";
-        readOnly = true;
-        description = ''
-          Where tsidp keeps its node key, its signing keys and the clients
-          registered with it, as nixpkgs' module sets it (a DynamicUser
-          StateDirectory, linked from /var/lib/tsidp). Losing it signs every
-          client out and needs the clients registered again, so back it up
-          with a homelab.backups.jobs entry.
-        '';
-      };
-      clients = lib.mkOption {
-        default = { };
-        example = lib.literalExpression ''
-          {
-            forgejo.redirectUris = [ "https://git.example.com/user/oauth2/tailscale/callback" ];
-            grafana = {
-              redirectUris = [ "https://status.example.com/login/generic_oauth" ];
-              owner = "grafana";
-            };
-          }
-        '';
-        description = ''
-          OIDC clients declared in tsidp, keyed by client id
-          (docs/adr/0010-tsidp-clients-declared-in-nix.md). Before tsidp
-          starts, each gets its id and a generated secret in its two files,
-          when they are missing or empty, and is written into tsidp's
-          clients with the secret from its file. Clients registered by hand
-          in the admin UI are left alone; a client removed here is removed
-          from tsidp, its files are left.
-        '';
-        type = lib.types.attrsOf (lib.types.submodule ({ name, ... }: {
-          options = {
-            redirectUris = lib.mkOption {
-              type = lib.types.nonEmptyListOf (lib.types.strMatching "https?://[^[:space:]]+");
-              description = "The redirect URIs tsidp accepts for this client.";
-            };
-            idFile = lib.mkOption {
-              type = lib.types.str;
-              default = "/var/lib/secrets/${name}-oidc-client-id";
-              description = "File the client id is written to, for the service to read.";
-            };
-            secretFile = lib.mkOption {
-              type = lib.types.str;
-              default = "/var/lib/secrets/${name}-oidc-client-secret";
-              description = ''
-                File holding the client secret. Generated, 64 random hex
-                digits, when missing or empty; a secret put there by hand
-                is kept and replaces the one in tsidp on its next start.
-              '';
-            };
-            owner = lib.mkOption {
-              type = lib.types.str;
-              default = "root";
-              example = "grafana";
-              description = ''
-                User owning the id and secret files, with that user's group;
-                both are mode 0400. The user the service reads them as.
-              '';
-            };
-          };
-        }));
       };
     };
 

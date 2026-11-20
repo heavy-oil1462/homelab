@@ -43,7 +43,7 @@ never reaches the workers.
   Remote-User only from Caddy, by its fixed address or a socket only Caddy
   mounts (Accepted)
 - [ADR-0006](0006-tsidp-for-oidc-sign-in.md): Forgejo and Grafana sign in
-  through tsidp, the tailnet's OIDC provider (Accepted)
+  through tsidp, the tailnet's OIDC provider (Superseded by ADR-0023)
 - [ADR-0007](0007-backup-freshness-textfile-metric.md): Backup freshness is
   a node exporter textfile metric written by each job (Accepted)
 - [ADR-0008](0008-dashboards-synced-from-git.md): Grafana's dashboards are
@@ -53,7 +53,7 @@ never reaches the workers.
   through Grafana Git Sync (Accepted)
 - [ADR-0010](0010-tsidp-clients-declared-in-nix.md): tsidp's OIDC clients
   are declared in Nix and written into its clients file before it starts
-  (Accepted)
+  (Superseded by ADR-0023)
 - [ADR-0011](0011-git-sync-seeds-an-empty-repository.md): Git Sync seeds an
   empty repository once from the site's dashboards (Accepted)
 - [ADR-0012](0012-git-sync-service-account-made-by-the-host.md): Grafana's
@@ -80,3 +80,5 @@ never reaches the workers.
   against Pocket ID itself (Accepted)
 - [ADR-0022](0022-home-assistant-http-settings-after-the-yaml.md): Home
   Assistant's HTTP settings after the YAML (Accepted)
+- [ADR-0023](0023-tsidp-retired-pocket-id-only.md): tsidp is retired;
+  Pocket ID is the only OIDC provider (Accepted)

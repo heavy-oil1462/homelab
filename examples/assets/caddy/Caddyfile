@@ -65,7 +65,7 @@ git.__DOMAIN__:443 {
 	reverse_proxy forgejo:3000
 }
 
-# Grafana signs in through tsidp with homelab.observability.grafanaOidc. With
+# Grafana signs in through Pocket ID with homelab.observability.grafanaOidc. With
 # homelab.observability.grafanaProxyAuth instead, the site imports
 # grafana_identity before reverse_proxy (generated from its admins, and
 # including tailnet_identity). With neither, Grafana is open to anyone who

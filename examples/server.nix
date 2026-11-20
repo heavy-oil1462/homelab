@@ -11,7 +11,6 @@
     ../modules/acme.nix
     ../modules/backups.nix
     ../modules/vulnerability-scan.nix
-    ../modules/tsidp.nix
     ../modules/pocket-id.nix
     ../modules/nvidia.nix
     ../containers/reverse-proxy.nix
@@ -54,8 +53,6 @@
         paths = [ "/var/lib/forgejo" ];
         sqliteDatabases = [ "/var/lib/forgejo/data/gitea.db" ];
       };
-      # tsidp's node and signing keys and its registered clients.
-      jobs.tsidp.paths = [ config.homelab.tsidp.stateDir ];
       # Pocket ID's users, passkeys, clients and encrypted signing keys,
       # with a consistent copy of its database. The encryption key in
       # /var/lib/secrets is not in the backup; keep it with the restic
@@ -71,45 +68,17 @@
     # exporter, and the reports stay in /var/lib/vulnerability-scan.
     vulnerabilityScan.enable = true;
 
-    # Forgejo and Grafana sign in through tsidp, at
-    # https://idp.<tailnet>.ts.net, which joins the tailnet with the auth
-    # key in /var/lib/secrets/tsidp.env. Turning on a service's OIDC below
-    # with the provider tsidp declares its client here, and tsidp writes the
-    # client's id and a generated secret to the files the service reads.
-    tsidp = {
-      enable = true;
-      clients = lib.mkMerge [
-        (lib.mkIf (config.homelab.forgejo.oidc.enable && config.homelab.forgejo.oidc.provider == "tsidp") {
-          forgejo = {
-            redirectUris = [ "https://git.${config.homelab.domain}/user/oauth2/tailscale/callback" ];
-            idFile = config.homelab.forgejo.oidc.clientIdFile;
-            secretFile = config.homelab.forgejo.oidc.clientSecretFile;
-          };
-        })
-        (lib.mkIf (config.homelab.observability.grafanaOidc.enable && config.homelab.observability.grafanaOidc.provider == "tsidp") {
-          grafana = {
-            redirectUris = [ "https://status.${config.homelab.domain}/login/generic_oauth" ];
-            idFile = config.homelab.observability.grafanaOidc.clientIdFile;
-            secretFile = config.homelab.observability.grafanaOidc.clientSecretFile;
-            # The grafana container runs as the host's grafana user.
-            owner = "grafana";
-          };
-        })
-      ];
-    };
-
     # Pocket ID at https://id.home.example.com, the site's OpenID Connect
-    # provider, which replaces tsidp
-    # (docs/adr/0018-pocket-id-is-the-oidc-provider.md). A service whose
-    # OIDC provider below is pocket-id declares its client here, and
-    # pocket-id-clients writes the client's id and secret files and
-    # restarts the units that read them (server-pocket-id.nix switches
-    # both). Only alice's tailnet login reaches its first-admin setup.
+    # provider (docs/adr/0018-pocket-id-is-the-oidc-provider.md). Forgejo
+    # and Grafana sign in through it: a service with OIDC turned on below
+    # declares its client here, and pocket-id-clients writes the client's
+    # id and secret files and restarts the units that read them. Only
+    # alice's tailnet login reaches its first-admin setup.
     pocketId = {
       enable = true;
       setupLogins = [ "alice@github" ];
       clients = lib.mkMerge [
-        (lib.mkIf (config.homelab.forgejo.oidc.enable && config.homelab.forgejo.oidc.provider == "pocket-id") {
+        (lib.mkIf config.homelab.forgejo.oidc.enable {
           forgejo = {
             displayName = "Forgejo";
             redirectUris = [ "https://git.${config.homelab.domain}/user/oauth2/pocket-id/callback" ];
@@ -118,7 +87,7 @@
             units = [ "forgejo-oidc.service" ];
           };
         })
-        (lib.mkIf (config.homelab.observability.grafanaOidc.enable && config.homelab.observability.grafanaOidc.provider == "pocket-id") {
+        (lib.mkIf config.homelab.observability.grafanaOidc.enable {
           grafana = {
             displayName = "Grafana";
             redirectUris = [ "https://status.${config.homelab.domain}/login/generic_oauth" ];
@@ -185,8 +154,8 @@
       nvidiaGpuTargets = [ "192.0.2.20:9835" ];
       grafanaOidc = {
         enable = true;
-        issuer = "https://idp.tailnet.invalid";
-        admins = [ "alice@example.com" "alice@github" ];
+        # The emails of the admins' Pocket ID accounts.
+        admins = [ "alice@example.com" ];
       };
     };
     homepage = {
@@ -214,10 +183,7 @@
       # The fleet run's certificate, with the principals root and alice,
       # also fetches from Forgejo once the Forgejo user alice lists alice as a principal.
       trustDeployCa = true;
-      oidc = {
-        enable = true;
-        issuer = "https://idp.tailnet.invalid";
-      };
+      oidc.enable = true;
     };
   };
 

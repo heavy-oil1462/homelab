@@ -1,8 +1,8 @@
 # Runs containers/forgejo-oidc.sh against a stubbed podman and systemctl: a
 # first run, a run with nothing to do, Forgejo that started before the
-# issuer answered, a changed secret, a switch from tsidp to Pocket ID that
-# updates and renames the source in place, a missing secret and an issuer
-# that does not answer.
+# issuer answered, a changed secret, a source left from tsidp (before
+# docs/adr/0023-tsidp-retired-pocket-id-only.md) that is updated and renamed
+# in place, a missing secret and an issuer that does not answer.
 { runCommand, callPackage, runtimeShell }:
 
 let
@@ -13,7 +13,7 @@ runCommand "forgejo-oidc-test" { } ''
   mkdir bin
   export PATH=$PWD/bin:$PATH STUB=$PWD
   export FORGEJO_OIDC_TRIES=3 FORGEJO_OIDC_WAIT=0
-  issuer=https://idp.tailnet.invalid
+  issuer=https://id.home.example.com
   export STUB_ISSUER=$issuer
 
   # podman answers like the forgejo container. The source exists once added,
@@ -52,9 +52,9 @@ runCommand "forgejo-oidc-test" { } ''
   fail() { echo "FAIL: $*" >&2; exit 1; }
   echo client-1 > id
   echo s3cret-1 > secret # public-check: fake
-  # The source's name, and the other provider's, as containers/forgejo.nix
+  # The source's name, and tsidp's former one, as containers/forgejo.nix
   # passes them.
-  name=tailscale former=pocket-id
+  name=pocket-id former=tailscale
   run() {
     : > podman.log; : > systemctl.log
     ${script}/bin/forgejo-oidc "$name" "$issuer" id secret state "$former" > out 2> err
@@ -63,7 +63,7 @@ runCommand "forgejo-oidc-test" { } ''
   # First run: adds the source with the id and secret on stdin, records it
   # and restarts Forgejo.
   run || { cat out err; fail "first: failed"; }
-  grep -q -- "add-oauth --name tailscale --provider openidConnect --auto-discover-url $issuer/.well-known/openid-configuration --scopes email --scopes profile" podman.log \
+  grep -q -- "add-oauth --name pocket-id --provider openidConnect --auto-discover-url $issuer/.well-known/openid-configuration --scopes email --scopes profile" podman.log \
     || fail "first: add-oauth not called as expected: $(cat podman.log)"
   if grep -q "s3cret-1\|client-1" podman.log; then fail "first: id or secret on the command line"; fi
   [ "$(cat stdin)" = "$(printf 'client-1\ns3cret-1')" ] || fail "first: stdin was: $(cat stdin)"
@@ -86,15 +86,15 @@ runCommand "forgejo-oidc-test" { } ''
   # A new secret: updates the source by its id and restarts.
   echo s3cret-2 > secret # public-check: fake
   run || { cat out err; fail "new secret: failed"; }
-  grep -q -- "update-oauth --id 1 --name tailscale" podman.log \
+  grep -q -- "update-oauth --id 1 --name pocket-id" podman.log \
     || fail "new secret: update-oauth not called: $(cat podman.log)"
   [ "$(sed -n 2p stdin)" = s3cret-2 ] || fail "new secret: stdin was: $(cat stdin)"
   grep -q "restart podman-forgejo.service" systemctl.log || fail "new secret: Forgejo not restarted"
 
-  # The switch to Pocket ID: a new issuer, id and secret, and the source
-  # "tailscale" is updated by its id and renamed, not added again.
-  name=pocket-id former=tailscale issuer=https://id.home.example.com
-  export STUB_ISSUER=$issuer
+  # A host still on tsidp's source "tailscale", set up for its issuer: the
+  # source is updated by its id and renamed, not added again.
+  echo tailscale > source
+  echo tsidp-hash > state
   echo pocket-client > id
   echo pocket-s3cret > secret # public-check: fake
   run || { cat out err; fail "switch: failed"; }

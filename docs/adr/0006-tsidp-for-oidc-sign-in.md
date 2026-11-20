@@ -1,6 +1,6 @@
 # ADR-0006: Forgejo and Grafana sign in through tsidp, the tailnet's OIDC provider
 
-Status: Accepted
+Status: Superseded by ADR-0023
 
 Amended by [ADR-0010](0010-tsidp-clients-declared-in-nix.md): clients a
 host declares in `homelab.tsidp.clients` are no longer registered by hand
