@@ -179,24 +179,6 @@ user. Commands run as root on the host.
 9. Once everything works, remove `/var/lib/forgejo.before-restore` and
    `/root/restore-forgejo`.
 
-## Restore tsidp
-
-tsidp's state (`homelab.tsidp.stateDir`, `/var/lib/private/tsidp`) holds its
-node key, signing keys and registered clients, and has no database to copy.
-With a `tsidp` job as in `examples/server.nix`:
-
-```sh
-systemctl stop tsidp
-restic-tsidp restore latest --tag tsidp --target /root/restore-tsidp
-mv /var/lib/private/tsidp /var/lib/private/tsidp.before-restore
-cp -a /root/restore-tsidp/var/lib/private/tsidp /var/lib/private/tsidp
-systemctl start tsidp
-```
-
-systemd gives the DynamicUser the directory on start. Without a backup, a
-new tsidp needs a fresh auth key, and every client registered again with new
-id and secret files.
-
 ## Checking a backup works
 
 After deploying a new job, run it once and look for its snapshot:

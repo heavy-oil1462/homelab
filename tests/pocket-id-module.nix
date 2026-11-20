@@ -1,6 +1,6 @@
-# The example server's Pocket ID, with the clients forgejo and grafana
-# declared by the flake and the OIDC gate's declared by the example
-# (docs/adr/0018-pocket-id-is-the-oidc-provider.md).
+# The example server's Pocket ID, with the clients of Forgejo, Grafana and
+# the OIDC gate declared by the example, and wiki, with every default, by
+# the flake (docs/adr/0018-pocket-id-is-the-oidc-provider.md).
 # Pure evaluation of the host config, then a build that reads only the
 # spec file the pocket-id-clients unit names:
 #
@@ -62,7 +62,7 @@ let
   expected = [
     {
       id = "forgejo";
-      displayName = "forgejo";
+      displayName = "Forgejo";
       redirectUris = [ "https://git.home.example.com/user/oauth2/pocket-id/callback" ];
       logoutRedirectUris = [ ];
       pkce = false;
@@ -92,6 +92,17 @@ let
       secretFile = "/var/lib/secrets/oidc-gate-oidc-client-secret";
       owner = "root:root";
       units = [ "oauth2-proxy.service" ];
+    }
+    {
+      id = "wiki";
+      displayName = "wiki";
+      redirectUris = [ "https://wiki.home.example.com/callback" ];
+      logoutRedirectUris = [ ];
+      pkce = false;
+      idFile = "/var/lib/secrets/wiki-oidc-client-id";
+      secretFile = "/var/lib/secrets/wiki-oidc-client-secret";
+      owner = "root:root";
+      units = [ ];
     }
   ];
 in

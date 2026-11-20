@@ -161,16 +161,24 @@ The apps match the owner's existing account like this
   Its client is declared like any other, as `examples/server.nix` does
   (docs/adr/0020-oidc-login-gate-at-the-proxy.md).
 
-## Moving Forgejo and Grafana to Pocket ID
+## Moving off tsidp
 
-Each service picks its provider, `tsidp` by default:
-`homelab.forgejo.oidc.provider` and
-`homelab.observability.grafanaOidc.provider`. Switch them one at a time
-or together, once Pocket ID runs and the owner's account exists (above).
+tsidp is removed, and Pocket ID is the only OIDC provider
+(docs/adr/0023-tsidp-retired-pocket-id-only.md). A host whose Forgejo or
+Grafana still signs in through tsidp no longer builds: the `tsidp` module
+is gone, and `homelab.tsidp` and the services' `issuer` options fail with
+a message that points here. The move is the provider switch sites made
+before tsidp was removed, homelab-config among them: there, each service
+set its `provider` to `pocket-id` and dropped its tsidp issuer and
+client, and a later update of this library removed the rest. A host
+still on tsidp makes the same switch in one rebuild, once Pocket ID runs
+and the owner's account exists (above). `provider` can only be
+`pocket-id` now; a host that sets it still builds.
 
 1. Make the owner's Pocket ID account match, in Pocket ID's admin UI under
    Users: its username is the owner's Forgejo user name, and its email is
-   the email of the owner's Grafana user (Grafana, Profile). If the Grafana email is tsidp's form, such as
+   the email of the owner's Grafana user (Grafana, Profile). If the Grafana
+   email is tsidp's form, such as
    `alice@github.idp.<tailnet>.ts.net`, keep the real address in Pocket
    ID; Grafana then makes a new user, as below.
 2. Know the password of the owner's Forgejo account. If it is forgotten,
@@ -182,9 +190,10 @@ or together, once Pocket ID runs and the owner's account exists (above).
    ```
 
    Forgejo asks for a new one at the next password sign in.
-3. In the host's config, declare the clients and switch the providers,
-   and remove each service's tsidp `issuer` (it becomes
-   `homelab.pocketId.url`) and its client in `homelab.tsidp.clients`:
+3. In the host's config, declare the clients, and remove `homelab.tsidp`,
+   the import of the `tsidp` module, the backup job of tsidp's state and
+   each service's `issuer` (it is `homelab.pocketId.url`). Grafana's
+   admins become Pocket ID emails:
 
    ```nix
    homelab.pocketId.clients = {
@@ -205,19 +214,14 @@ or together, once Pocket ID runs and the owner's account exists (above).
        units = [ "podman-grafana.service" ];
      };
    };
-   homelab.forgejo.oidc.provider = "pocket-id";
-   homelab.observability.grafanaOidc = {
-     provider = "pocket-id";
-     # The admins' Pocket ID emails.
-     admins = [ "alice@example.com" ];
-   };
+   # The admins' Pocket ID emails.
+   homelab.observability.grafanaOidc.admins = [ "alice@example.com" ];
    ```
 
    The host does not build if Pocket ID is off, a client is missing, a
-   tsidp issuer is left, or, for Grafana, Pocket ID lets users edit their
-   own accounts. `examples/server.nix` declares the clients from
-   the options this way, and `examples/server-pocket-id.nix` switches
-   both services.
+   tsidp option is left, or, for Grafana, Pocket ID lets users edit their
+   own accounts. `examples/server.nix` declares the clients from the
+   options this way.
 4. Rebuild. `pocket-id-clients` creates both clients, writes their id and
    secret files over tsidp's, and restarts `forgejo-oidc` and Grafana.
    `forgejo-oidc` updates the sign in source `tailscale` in place to
@@ -246,9 +250,10 @@ What the owner sees on the first sign in:
 
 Sessions already open in either service keep working until they expire.
 
-Switching back is the same in reverse: set the provider to `tsidp` with
-its issuer and client again. The source is renamed `tailscale`, and the
-links made with tsidp work again.
+Once both sign in through Pocket ID, what tsidp left can go: its state in
+`/var/lib/private/tsidp`, `/var/lib/secrets/tsidp.env`, the `idp` node in
+the tailnet's admin console, and the `tailscale.com/cap/tsidp` grant in
+the tailnet policy. A rebuild removes none of them.
 
 ## Restoring
 

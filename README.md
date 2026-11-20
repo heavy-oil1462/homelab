@@ -102,20 +102,17 @@ Services (OCI containers, pinned by digest):
   as Admin, through a status site that imports `grafana_identity`, and
   Grafana trusts `Remote-User` only from Caddy's address. With
   `homelab.observability.grafanaOidc.enable` instead, Grafana signs in
-  through the provider in `homelab.observability.grafanaOidc.provider`:
-  tsidp (the `tsidp` module, the default) or Pocket ID (the `pocket-id`
-  module): the users in `homelab.observability.grafanaOidc.admins`, by
-  tailnet login with tsidp and by Pocket ID email with Pocket ID, get
+  through Pocket ID (the `pocket-id` module): the users in
+  `homelab.observability.grafanaOidc.admins`, by Pocket ID email, get
   Admin, everyone else is refused. Its client has the redirect URI
   `https://status.<domain>/login/generic_oauth`; declared in
-  `homelab.pocketId.clients` or `homelab.tsidp.clients` with owner
-  `grafana`, as `examples/server.nix` does, the provider writes its id
-  and secret to `/var/lib/secrets/grafana-oidc-client-id` and
-  `/var/lib/secrets/grafana-oidc-client-secret`
-  (docs/adr/0006-tsidp-for-oidc-sign-in.md,
-  docs/adr/0010-tsidp-clients-declared-in-nix.md). With Pocket ID,
-  Grafana also finds an existing user by email, so a switch keeps the
-  owner's user, and needs Pocket ID's own-account editing off; [docs/pocket-id.md](docs/pocket-id.md) has the switch
+  `homelab.pocketId.clients` with owner `grafana` and
+  `podman-grafana.service` among its units, as `examples/server.nix`
+  does, Pocket ID writes its id and secret to
+  `/var/lib/secrets/grafana-oidc-client-id` and
+  `/var/lib/secrets/grafana-oidc-client-secret`. Grafana also finds an
+  existing user by email, so a switch from another sign in keeps the
+  owner's user, and needs Pocket ID's own-account editing off
   (docs/adr/0019-forgejo-and-grafana-on-pocket-id.md). Dashboards in
   `homelab.observability.dashboardsDir` are provisioned read-only into the
   Homelab folder and change with a rebuild. With
@@ -204,22 +201,20 @@ Services (OCI containers, pinned by digest):
   so the git site proxies to `unix//run/forgejo-http/http.sock` instead of
   `forgejo:3000`. Tokens and git over SSH work as before.
   With `homelab.forgejo.oidc.enable` instead, the web UI signs in through
-  the provider in `homelab.forgejo.oidc.provider`, tsidp (the `tsidp`
-  module, the default) or Pocket ID (the `pocket-id` module), and Forgejo
-  creates an account on a user's first sign in. The `forgejo-oidc` unit
-  adds the provider as the sign in source `tailscale` (tsidp) or
-  `pocket-id` and restarts Forgejo when it changes; switching providers
-  updates and renames the one source in place. Its client has the
-  redirect URI `https://git.<domain>/user/oauth2/<source>/callback`;
-  declared in `homelab.pocketId.clients` with `forgejo-oidc.service` among
-  its units, or in `homelab.tsidp.clients`, the provider writes its id and
-  secret to `/var/lib/secrets/forgejo-oidc-client-id` and
+  Pocket ID (the `pocket-id` module), and Forgejo creates an account on a
+  user's first sign in. The `forgejo-oidc` unit adds Pocket ID as the
+  sign in source `pocket-id` and restarts Forgejo when it changes; a
+  source `tailscale` left from tsidp is updated and renamed in place. Its
+  client has the redirect URI
+  `https://git.<domain>/user/oauth2/pocket-id/callback`; declared in
+  `homelab.pocketId.clients` with `forgejo-oidc.service` among its units,
+  Pocket ID writes its id and secret to
+  `/var/lib/secrets/forgejo-oidc-client-id` and
   `/var/lib/secrets/forgejo-oidc-client-secret`. An existing account is
-  linked on a user's first sign in through a new provider once they give
-  its password; [docs/pocket-id.md](docs/pocket-id.md) has the switch. A
+  linked on a user's first sign in through Pocket ID once they give its
+  password; [docs/pocket-id.md](docs/pocket-id.md) has the steps. A
   service uses proxy authentication or OIDC, never both
-  (docs/adr/0006-tsidp-for-oidc-sign-in.md,
-  docs/adr/0019-forgejo-and-grafana-on-pocket-id.md).
+  (docs/adr/0019-forgejo-and-grafana-on-pocket-id.md).
   With `homelab.forgejo.trustDeployCa`, the SSH server also accepts user
   certificates signed by `homelab.deployCaKeys`, so the certificate a fleet
   run signs for the hosts fetches from Forgejo too
@@ -291,37 +286,13 @@ System:
   modules are seen. Containers whose `podman.user` is set to another user
   than root run in that user's rootless podman and are not scanned
   (docs/adr/0017-running-images-are-scanned.md).
-- `tsidp` (`homelab.tsidp`): tsidp, Tailscale's OpenID Connect provider,
-  with nixpkgs' `services.tsidp`, as its own tailnet node
-  `homelab.tsidp.hostName` (`idp`); the issuer is
-  `https://idp.<tailnet>.ts.net`. Forgejo and Grafana sign in through it.
-  Joins the tailnet with the auth key in `/var/lib/secrets/tsidp.env`
-  (`TS_AUTHKEY=tskey-auth-...`; a one-off tagged key). Its node and signing
-  keys and the registered clients live in `homelab.tsidp.stateDir`
-  (`/var/lib/private/tsidp`); back it up with a job, as
-  `examples/server.nix` does. Clients are declared in
-  `homelab.tsidp.clients.<id>` (`redirectUris`, `idFile`, `secretFile`,
-  `owner`): before tsidp starts, each gets its id and a generated secret in
-  its files under `/var/lib/secrets` when they are missing or empty, and is
-  written into tsidp's clients; clients added in the admin UI are left
-  alone (docs/adr/0010-tsidp-clients-declared-in-nix.md). The example
-  declares Forgejo's and Grafana's from their OIDC options. Other clients
-  can be registered in its admin UI at the issuer URL, which needs a grant
-  in the tailnet policy:
-
-  ```hujson
-  "grants": [{
-    "src": ["alice@example.com"],
-    "dst": ["tag:idp"],
-    "app": { "tailscale.com/cap/tsidp": [{ "allow_admin_ui": true }] }
-  }]
-  ```
-
 - `pocket-id` (`homelab.pocketId`): Pocket ID, the site's OpenID Connect
   provider, with nixpkgs' `services.pocket-id`, at
   `https://<hostName>.<domain>` (`id`), which is also the issuer URL
-  (docs/adr/0018-pocket-id-is-the-oidc-provider.md). It replaces tsidp
-  service by service. Users sign in with passkeys; the first run, the
+  (docs/adr/0018-pocket-id-is-the-oidc-provider.md), and the only one:
+  tsidp is removed (docs/adr/0023-tsidp-retired-pocket-id-only.md), and
+  a host still on it moves as [docs/pocket-id.md](docs/pocket-id.md#moving-off-tsidp)
+  says. Users sign in with passkeys; the first run, the
   owner's account and the claims each app matches on are in
   [docs/pocket-id.md](docs/pocket-id.md). It serves only on the socket
   `/run/pocket-id-http/pocket-id.sock`, which the caddy container mounts,
@@ -390,11 +361,10 @@ starting a container or makes it create a directory in the file's place.
 | `ha-prometheus-token` | `observability` | prometheus, 0640 | Prometheus runs; the home-assistant scrape fails with 401 |
 | `registry.htpasswd` | `registry` | registry, 0400 | the registry refuses to start, naming the file |
 | `forgejo-secret-key` | `forgejo` | forgejo, 0400 | Forgejo refuses to start |
-| `grafana-oidc-client-id`, `grafana-oidc-client-secret` | `observability`, with `grafanaOidc` | grafana, 0400 | written by Pocket ID or tsidp for a client in `homelab.pocketId.clients` or `homelab.tsidp.clients`; otherwise Grafana runs and no one can sign in |
-| `forgejo-oidc-client-id`, `forgejo-oidc-client-secret` | `forgejo`, with `oidc` | root, 0400 | written by Pocket ID or tsidp for a client in `homelab.pocketId.clients` or `homelab.tsidp.clients`; otherwise the `forgejo-oidc` unit fails and Forgejo runs without the sign in source |
+| `grafana-oidc-client-id`, `grafana-oidc-client-secret` | `observability`, with `grafanaOidc` | grafana, 0400 | written by Pocket ID for a client in `homelab.pocketId.clients`; otherwise Grafana runs and no one can sign in |
+| `forgejo-oidc-client-id`, `forgejo-oidc-client-secret` | `forgejo`, with `oidc` | root, 0400 | written by Pocket ID for a client in `homelab.pocketId.clients`; otherwise the `forgejo-oidc` unit fails and Forgejo runs without the sign in source |
 | `grafana-git-sync-token` | `observability`, with `grafanaGitSync` | root, 0400 | the `grafana-git-sync` unit fails; Grafana keeps the repository it has, or has none on a new host |
 | `grafana-git-sync-api-token` | `observability`, with `grafanaGitSync` | root, 0400 | written by the `grafana-git-sync` unit, with a new token of the service account `grafana-git-sync`, when missing or empty |
-| `tsidp.env` | `tsidp` | root, 0400 | missing, tsidp does not start, even once it has joined the tailnet; empty, a new tsidp prints a sign in link to its journal instead of joining |
 | `pocket-id-encryption-key` | `pocket-id` | root, 0400 | generated on the first start; with a database and no key, `pocket-id-keys` fails and Pocket ID does not start, since the database cannot be read without the key it was made with |
 | `pocket-id-api-key` | `pocket-id` | root, 0400 | generated by `pocket-id-keys` before Pocket ID starts |
 | `<id>-oidc-client-id`, `<id>-oidc-client-secret` | the service of a client in `homelab.pocketId.clients` | its `owner`, 0400 | written by `pocket-id-clients`; an empty secret file gets a new secret |
@@ -403,11 +373,10 @@ starting a container or makes it create a directory in the file's place.
 | `restic-password`, `rclone.env` | `backups` | root | backups fail |
 | `tailscale-authkey` | `tailscale` | root | not needed once the host is on the tailnet; deleted after use |
 
-`cloudflare.env`, the backup secrets, `tailscale-authkey`, `tsidp.env`,
+`cloudflare.env`, the backup secrets, `tailscale-authkey`,
 Pocket ID's keys, the OIDC gate's secrets, the Git Sync tokens and Forgejo's OIDC files are read by NixOS services, not containers, and get no
 tmpfiles rule: missing, their units fail, as most would with an empty file,
-and the Tailscale key must stay absent once used. Once tsidp has joined,
-its key may be revoked; the file stays, emptied if you like. Keep a copy of
+and the Tailscale key must stay absent once used. Keep a copy of
 `pocket-id-encryption-key` off the host with the backup password: a
 restored Pocket ID database needs it.
 
@@ -524,12 +493,11 @@ any domain.
 `nix flake check` deep-evaluates the example hosts down to derivation
 paths, which catches option and type errors without building full systems.
 `examples/server-proxy-auth.nix` is the example server with Forgejo and
-Grafana on proxy authentication instead of tsidp, and
-`examples/server-pocket-id.nix` with both on Pocket ID, so all three are
+Grafana on proxy authentication instead of Pocket ID, so both are
 evaluated. The `oidc-providers` check holds Forgejo's and Grafana's OIDC
-settings on each provider to
+settings on Pocket ID to
 docs/adr/0019-forgejo-and-grafana-on-pocket-id.md, and the assertions that
-refuse a half-done switch. The
+refuse a half-done setup or tsidp's removed options. The
 `container-hardening` check holds every container of the example servers
 to docs/adr/0014-containers-run-unprivileged.md: a user that is not root,
 or the allowlist; `no-new-privileges`; all capabilities dropped. The
@@ -561,8 +529,8 @@ sign-out, forged headers and users who are not let in; the
 `oidc-gate-module` check holds the evaluated service, its socket and the
 configurations the host refuses (docs/adr/0020-oidc-login-gate-at-the-proxy.md).
 The checks also run the `forgejo-admin` and `forgejo-oidc` scripts
-against stubs, the latter through a switch of provider, the `tsidp-clients` script against a fake tsidp state
-directory, the `pocket-id-clients` script against nixpkgs' Pocket ID, run
+against stubs, the latter through the rename of a source left from
+tsidp, the `pocket-id-clients` script against nixpkgs' Pocket ID, run
 with the example's settings on a temporary database, and the Caddy
 identity snippets in a real Caddy.
 

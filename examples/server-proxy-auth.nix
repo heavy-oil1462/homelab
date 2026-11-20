@@ -1,5 +1,5 @@
 # The example server with Forgejo and Grafana on proxy authentication
-# (docs/adr/0005-proxy-auth-only-from-caddy.md) instead of tsidp, so the
+# (docs/adr/0005-proxy-auth-only-from-caddy.md) instead of Pocket ID, so the
 # flake's checks evaluate that path too and run the identity snippets it
 # generates. A host uses one or the other for each service.
 { lib, ... }:
