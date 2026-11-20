@@ -78,3 +78,5 @@ never reaches the workers.
 - [ADR-0021](0021-pocket-id-clients-on-the-secrets-api.md):
   pocket-id-clients follows Pocket ID's secrets API and is checked
   against Pocket ID itself (Accepted)
+- [ADR-0022](0022-home-assistant-http-settings-after-the-yaml.md): Home
+  Assistant's HTTP settings after the YAML (Accepted)

@@ -268,6 +268,18 @@
             }];
           }).config;
         };
+        # Home Assistant's reverse proxy settings, merged into .storage/http
+        # by the example server's unit, against nixpkgs' Home Assistant, and
+        # the http: block in configuration.yaml the module refuses.
+        homeassistant-http = pkgs.callPackage ./tests/homeassistant-http.nix {
+          config = exampleServer.config;
+          withYamlHttp = (exampleServer.extendModules {
+            modules = [{
+              homelab.homeassistant.configurationFile = nixpkgs.lib.mkForce
+                (pkgs.writeText "configuration.yaml" "homeassistant:\nhttp:\n  use_x_forwarded_for: true\n");
+            }];
+          }).config;
+        };
         # The CDI spec check of GPU containers against stub specs, and its
         # place in the example server's Frigate unit. The unit's strings are
         # compared, never run: their string context is discarded, so the

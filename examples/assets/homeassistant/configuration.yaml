@@ -6,20 +6,15 @@ default_config:
 automation: !include automations.yaml
 script: !include scripts.yaml
 
-# From 2026.8 Home Assistant reads this block into .storage/http on its first
-# start and ignores it afterwards; the settings then live under Settings >
-# System > Network. On a new install the import is a trial: confirm it there
-# within five minutes, or HA restarts without these settings and answers the
-# reverse proxy with 400. Since 2026.11, signing in at a non-local IP address
-# (a tailnet address, for example) needs the address in the browser to match
-# the one HA sees, which through a proxy holds only if the proxy is trusted
-# here. A domain name, as in external_url below, is not checked.
-http:
-  use_x_forwarded_for: true
-  trusted_proxies:
-    # The reverse proxy as seen by Home Assistant. With host networking and a
-    # podman reverse proxy this is the podman bridge gateway.
-    - 192.0.2.1
+# No http: block. The homeassistant module writes the reverse proxy
+# settings, use_x_forwarded_for and trusted_proxies, into .storage/http from
+# homelab.homeassistant.trustedProxies before Home Assistant starts; HA has
+# read the block only once since 2026.8 and drops it in 2027.2. The module
+# refuses a file that still has one. Since 2026.11, signing in at a
+# non-local IP address (a tailnet address, for example) needs the address in
+# the browser to match the one HA sees, which through a proxy holds only if
+# the proxy is trusted. A domain name, as in external_url below, is not
+# checked.
 
 homeassistant:
   external_url: https://smart.__DOMAIN__
