@@ -82,3 +82,5 @@ never reaches the workers.
   Assistant's HTTP settings after the YAML (Accepted)
 - [ADR-0023](0023-tsidp-retired-pocket-id-only.md): tsidp is retired;
   Pocket ID is the only OIDC provider (Accepted)
+- [ADR-0024](0024-break-glass-ssh-from-the-lan.md): Break-glass SSH from
+  the LAN, keys only (Accepted)

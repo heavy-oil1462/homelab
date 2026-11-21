@@ -38,6 +38,9 @@ work in its repository.
   every server, and for a new one when it joins ("i set all servers to do
   not expire for now", owner, board, 2026-11-21). An alert catches a key
   that would expire, and Tailscale being down.
+- Break-glass access: when Tailscale is down, the servers take SSH on port
+  22 from the LAN admin subnet, keys only (owner, question 01a2001c-d9ed,
+  2026-11-21; ADR-0024). SSH access stays an Ask-the-owner-first change.
 - Containers run unprivileged: as a dedicated host user with a static id,
   with `no-new-privileges` and all capabilities dropped but those each
   names. Root stays only where the image supports nothing else, on the

@@ -38,6 +38,10 @@
       "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tPlaceholderPlaceholderPlaceholder00000000000 deploy-ca@example"
     ];
     tailnetIp = "100.64.0.1";
+    # Break-glass SSH from the LAN for when Tailscale is down, keys only
+    # (docs/adr/0024-break-glass-ssh-from-the-lan.md). Left empty here; the
+    # break-glass-ssh check evaluates this host with it set:
+    # network.sshFrom = [ "192.0.2.0/24" ];
     # GPU load for the GPU dashboard, from the NVIDIA driver the nvidia module
     # installs. Prometheus scrapes it on port 9835 over the tailnet, through
     # observability.nvidiaGpuTargets below.

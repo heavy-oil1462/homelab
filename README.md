@@ -48,7 +48,8 @@ RFC 5737 documentation ranges.
 Roles:
 
 - `server-role`: headless VM baseline (grub, DHCP, podman, tailscale,
-  node exporter, fluent-bit log shipping, tailnet-only SSH).
+  node exporter, fluent-bit log shipping, tailnet-only SSH, and break-glass
+  SSH from the LAN with `homelab.network.sshFrom`, see [SSH access](#ssh-access)).
 - `workstation-role`: Hyprland desktop, greetd/tuigreet, pipewire, YubiKey
   login, libvirt, and the agent sandbox.
 
@@ -244,7 +245,8 @@ System:
   consistent SQLite snapshots, and each job's last successful run as a
   node exporter metric; restoring is in [docs/backups.md](docs/backups.md)),
   `locale`, `yubikey` (pam_u2f with a
-  host-independent origin), `firewall` (role-based baseline), `nvidia` (proprietary driver;
+  host-independent origin), `firewall` (role-based baseline, and
+  SSH from the networks in `homelab.network.sshFrom`), `nvidia` (proprietary driver;
   the host must allow the unfree `nvidia-x11` and `nvidia-settings`, as
   `examples/workstation.nix` does; with `homelab.nvidia.cdiCheck.units`,
   the listed GPU containers check the container toolkit's CDI spec before
@@ -351,7 +353,8 @@ as each value of a label is a stream of its own.
 ## Tailscale key expiry
 
 Servers take SSH on the tailnet only, so a node key that expires cuts the
-host off until someone logs it in again at its console. On every host
+host off until someone logs it in again at its console, or over SSH from
+the LAN where `homelab.network.sshFrom` allows it ([SSH access](#ssh-access)). On every host
 with the `tailscale` and `observability-agent` modules, the
 `tailscale-metrics` unit reads `tailscale status --json` every 5 minutes,
 and at boot once tailscaled has had 2 minutes, and writes for the node
@@ -377,6 +380,35 @@ disabled from the start; a node logged in as a user gets the tailnet's key
 expiry (180 days unless changed in the settings), so check the machine
 there after every join. The alert then only fires for a server this step
 was missed on.
+
+## SSH access
+
+Servers take SSH on `tailscale0`, and deploys and admin SSH go over the
+tailnet. For when Tailscale is down, such as after a node key expired,
+`homelab.network.sshFrom` lists the LAN's admin subnets that may reach
+port 22 on any other interface
+(docs/adr/0024-break-glass-ssh-from-the-lan.md):
+
+```nix
+homelab.network.sshFrom = [ "192.0.2.0/24" ];
+```
+
+Login stays keys only: the host refuses to build with password or
+keyboard-interactive authentication on, with `PermitRootLogin = "yes"`, or
+with an sshd that listens on loopback only (import `openssh`, as the
+server role does). A prefix length of 0, such as `0.0.0.0/0` or `::/0`, is
+refused. Empty, the default, the firewall is as before.
+
+From a machine in one of those subnets, reach the host by its LAN address,
+since MagicDNS names need Tailscale:
+
+```sh
+ssh alice@192.0.2.10
+```
+
+Then repair Tailscale on the host, for example with `tailscale up` and a
+new auth key. Changing who may reach SSH is a change to ask the owner about
+first (DIRECTION.md).
 
 ## Secrets
 
@@ -539,7 +571,12 @@ socket: its group, socket and directory modes, the mount, and the restart
 trigger that makes a switch create it anew. The `forgejo-deploy-ca` check
 holds Forgejo's SSH settings to `homelab.forgejo.trustDeployCa`: with it
 on, the deploy CA keys and principals limited to user names; off, no CA
-and no principals. The `vulnerability-scan-images` check holds the example server's scan to
+and no principals. The `break-glass-ssh` check holds
+`homelab.network.sshFrom` to docs/adr/0024-break-glass-ssh-from-the-lan.md:
+the example server with documentation ranges set gets the iptables rules,
+or nftables ones on that firewall, and fails to build with password
+authentication on, an sshd on loopback only, or `0.0.0.0/0` and `::/0`.
+The `vulnerability-scan-images` check holds the example server's scan to
 exactly its containers' images, with only the save and publish steps as
 root, and the `vulnerability-scan` check runs the scan's script against a
 stubbed podman and Trivy with a fixture report. The `alert-rules` check
