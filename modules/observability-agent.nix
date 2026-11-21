@@ -3,7 +3,8 @@
 # node_exporter on port 9100, with the systemd collector for unit states and
 # the textfile collector for metrics other modules write as *.prom files into
 # homelab.observabilityAgent.textfileDirectory (the backups module's last
-# successful run per job, the vulnerability-scan module's counts). A writer replaces its file atomically (a temporary
+# successful run per job, the vulnerability-scan module's counts, the tailscale
+# module's key expiry). A writer replaces its file atomically (a temporary
 # name without .prom, then a rename), so a scrape never reads half a file.
 #
 # With homelab.observabilityAgent.nvidiaGpu.enable, also nixpkgs' NVIDIA GPU

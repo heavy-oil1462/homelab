@@ -203,8 +203,11 @@
         # and a fixture report: counts per severity and fixable, no CVE
         # labels, the exposition format.
         vulnerability-scan = pkgs.callPackage ./tests/vulnerability-scan.nix { };
+        # The tailscale-metrics script against the real tailscaled logged
+        # out and samples of its status with an expiry, none and expired.
+        tailscale-metrics = pkgs.callPackage ./tests/tailscale-metrics.nix { };
         # The example's alert rules in promtool: every query parses, and the
-        # vulnerability rules alert on what they should.
+        # vulnerability and Tailscale rules alert on what they should.
         alert-rules = pkgs.callPackage ./tests/alert-rules.nix { };
         # Forgejo's and Grafana's OIDC sign in on Pocket ID, the example
         # server's, a host that still names the provider, and the assertions

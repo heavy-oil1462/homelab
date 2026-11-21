@@ -34,6 +34,10 @@ work in its repository.
   and date (`# 1.37.1, :latest as of 2026-08-04`).
 - Services are tailnet-only by default: nothing new listens on LAN
   interfaces unless an option opts in.
+- Servers' Tailscale node keys do not expire: key expiry is disabled for
+  every server, and for a new one when it joins ("i set all servers to do
+  not expire for now", owner, board, 2026-11-21). An alert catches a key
+  that would expire, and Tailscale being down.
 - Break-glass access: when Tailscale is down, the servers take SSH on port
   22 from the LAN admin subnet, keys only (owner, question 01a2001c-d9ed,
   2026-11-21; ADR-0024). SSH access stays an Ask-the-owner-first change.

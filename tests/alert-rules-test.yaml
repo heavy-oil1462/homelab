@@ -56,3 +56,45 @@ tests:
               instance: host:9100
               job: node-exporter
               container: caddy
+
+  # A key expiring at 20 days has 14 days left at 6 days, and alerts once
+  # the hold of an hour has passed. One expiring at 30 days does not.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_tailscale_key_expiry_timestamp_seconds{instance="server1:9100", job="node-exporter"}'
+        values: '1728000x8800'
+      - series: 'homelab_tailscale_key_expiry_timestamp_seconds{instance="server2:9100", job="node-exporter"}'
+        values: '2592000x8800'
+    alert_rule_test:
+      - eval_time: 6d30m
+        alertname: homelab-tailscale-key-expiry
+        exp_alerts: []
+      - eval_time: 6d2h
+        alertname: homelab-tailscale-key-expiry
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: server1:9100
+              job: node-exporter
+
+  # A host offline for 10 minutes alerts; one online, and one offline for
+  # only 5 minutes after boot, do not.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_tailscale_online{instance="server1:9100", job="node-exporter"}'
+        values: '0x30'
+      - series: 'homelab_tailscale_online{instance="server2:9100", job="node-exporter"}'
+        values: '1x30'
+      - series: 'homelab_tailscale_online{instance="server3:9100", job="node-exporter"}'
+        values: '0x5 1x25'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: homelab-tailscale-down
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: homelab-tailscale-down
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              instance: server1:9100
+              job: node-exporter

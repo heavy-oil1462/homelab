@@ -253,7 +253,10 @@ System:
   every start and write it again when it mounts another driver, see
   [docs/nvidia.md](docs/nvidia.md)), `vm-disko` (single-disk VM layout; needs
   disko's NixOS module from your own flake, as `examples/vm.nix` shows),
-  `tailscale`, `logging-agent` (fluent-bit ships the journal to Loki at
+  `tailscale` (joins the tailnet with a one-off auth key at install; with
+  the node exporter on, writes the node key's expiry and whether the node
+  is online every 5 minutes, see
+  [Tailscale key expiry](#tailscale-key-expiry)), `logging-agent` (fluent-bit ships the journal to Loki at
   `homelab.logsHost`; see [Logs](#logs)), `observability-agent` (node exporter with
   the systemd collector, and the textfile collector reading
   `homelab.observabilityAgent.textfileDirectory`; with
@@ -346,6 +349,37 @@ only `job` and `host`, so for those the `| json` filter is still the way;
 select them with `unit=""`. The labels are kept to the few units and
 containers of a host; message, priority and process ids stay in the line,
 as each value of a label is a stream of its own.
+
+## Tailscale key expiry
+
+Servers take SSH on the tailnet only, so a node key that expires cuts the
+host off until someone logs it in again at its console, or over SSH from
+the LAN where `homelab.network.sshFrom` allows it ([SSH access](#ssh-access)). On every host
+with the `tailscale` and `observability-agent` modules, the
+`tailscale-metrics` unit reads `tailscale status --json` every 5 minutes,
+and at boot once tailscaled has had 2 minutes, and writes for the node
+exporter's textfile collector:
+
+- `homelab_tailscale_key_expiry_timestamp_seconds`: when the node key
+  expires, as a Unix time; absent when expiry is disabled or the node is
+  logged out.
+- `homelab_tailscale_key_expiry_disabled`: 1 when expiry is disabled for
+  the node, else 0.
+- `homelab_tailscale_online`: 1 when the node is logged in and connected
+  to the control plane, else 0.
+
+The example rules alert as "Tailscale key expires soon" 14 days ahead, and
+as "Tailscale down" after 10 minutes offline. Renew a key on the host with
+`tailscale up --force-reauth` while it is still reachable.
+
+Every server has key expiry disabled, a step of joining it to the
+tailnet (DIRECTION.md). In the Tailscale admin console, open Machines, the
+new machine's `...` menu, and choose Disable key expiry. Nodes logged in
+with an auth key carrying tags, as `tailscale` installs them, have expiry
+disabled from the start; a node logged in as a user gets the tailnet's key
+expiry (180 days unless changed in the settings), so check the machine
+there after every join. The alert then only fires for a server this step
+was missed on.
 
 ## SSH access
 
@@ -547,7 +581,10 @@ exactly its containers' images, with only the save and publish steps as
 root, and the `vulnerability-scan` check runs the scan's script against a
 stubbed podman and Trivy with a fixture report. The `alert-rules` check
 turns the example's Grafana rules into Prometheus rules, parses every
-query with promtool and tests the vulnerability rules in it.
+query with promtool and tests the vulnerability and Tailscale rules in
+it. The `tailscale-metrics` check runs the Tailscale metrics script
+against nixpkgs' tailscaled, logged out, and against its status with a
+key expiry, with none, and with an expired key.
 The `logging-labels` check holds the example server's fluent-bit config to
 the [log labels](#logs) and runs it against a stand-in for Loki: a
 container's line labelled with unit and container, a host service's with
