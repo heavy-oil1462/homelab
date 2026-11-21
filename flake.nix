@@ -234,6 +234,37 @@
               };
             };
         };
+        # Break-glass SSH from the LAN: the example server with sshFrom set
+        # to documentation ranges gets the rules, on iptables and nftables,
+        # and password logins, a loopback-only sshd or 0.0.0.0/0 fail the
+        # build (ADR-0024).
+        break-glass-ssh =
+          let
+            with' = host: module: (host.extendModules { modules = [ module ]; }).config;
+            sshFrom = { homelab.network.sshFrom = [ "192.0.2.0/24" "2001:db8::/64" ]; };
+            onHost = exampleServer.extendModules { modules = [ sshFrom ]; };
+          in
+          pkgs.callPackage ./tests/break-glass-ssh.nix {
+            on = onHost.config;
+            nftables = with' onHost { networking.nftables.enable = true; };
+            off = exampleServer.config;
+            broken = {
+              passwordAuth = with' onHost {
+                services.openssh.settings.PasswordAuthentication = nixpkgs.lib.mkForce true;
+              };
+              kbdInteractive = with' onHost {
+                services.openssh.settings.KbdInteractiveAuthentication = nixpkgs.lib.mkForce true;
+              };
+              rootLogin = with' onHost {
+                services.openssh.settings.PermitRootLogin = nixpkgs.lib.mkForce "yes";
+              };
+              loopbackOnly = with' onHost {
+                services.openssh.listenAddresses = nixpkgs.lib.mkForce [{ addr = "127.0.0.1"; port = 22; }];
+              };
+              everyone = with' exampleServer { homelab.network.sshFrom = [ "192.0.2.0/24" "0.0.0.0/0" ]; };
+              everyone6 = with' exampleServer { homelab.network.sshFrom = [ "::/0" ]; };
+            };
+          };
         # The forgejo-oidc unit's script against a stubbed podman and systemctl.
         forgejo-oidc = pkgs.callPackage ./tests/forgejo-oidc.nix { };
         # The script declaring Pocket ID's clients, against nixpkgs' Pocket

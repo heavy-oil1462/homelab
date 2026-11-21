@@ -228,6 +228,23 @@ in
       description = "The primary role of the host for determining base firewall rules.";
     };
 
+    network.sshFrom = lib.mkOption {
+      type = lib.types.listOf (lib.types.strMatching
+        "([0-9]{1,3}(\\.[0-9]{1,3}){3}|[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*)/[0-9]{1,3}");
+      default = [ ];
+      example = [ "192.0.2.0/24" "2001:db8::/64" ];
+      description = ''
+        Networks, as IPv4 or IPv6 CIDRs, that may reach SSH on port 22 on
+        any interface but tailscale0: break-glass access from the LAN for
+        when Tailscale is down (docs/adr/0024-break-glass-ssh-from-the-lan.md).
+        tailscale0 keeps its own rule. With any set, sshd must listen on
+        every address (the openssh module does) and take keys only:
+        PasswordAuthentication and KbdInteractiveAuthentication off and
+        PermitRootLogin not "yes". A prefix length of 0, such as 0.0.0.0/0
+        or ::/0, is refused. Empty, the default, opens nothing.
+      '';
+    };
+
     backups.resticRepo = lib.mkOption {
       type = lib.types.str;
       example = "rclone:gdrive:my-backup";
