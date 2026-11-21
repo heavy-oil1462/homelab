@@ -358,6 +358,78 @@ groups:
             The acme module renews certificates well before this, so renewal
             has been failing; check it with: journalctl -u 'acme-*'
 
+      # A host whose Tailscale node key runs out within 14 days, or has run
+      # out. Servers take SSH on the tailnet only (modules/firewall.nix),
+      # so an expired key locks the owner out. modules/tailscale.nix writes
+      # the expiry every 5 minutes; a host with expiry disabled has no
+      # series (homelab_tailscale_key_expiry_disabled is 1 instead).
+      - uid: homelab-tailscale-key-expiry
+        title: Tailscale key expires soon
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                (homelab_tailscale_key_expiry_timestamp_seconds - time()) / 86400
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [14] } # days left
+        noDataState: OK
+        execErrState: Error
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "The Tailscale key of {{ $labels.instance }} expires in {{ humanize $values.A.Value }} days"
+          description: >-
+            Renew it with tailscale up --force-reauth on the host while SSH
+            still works, or disable key expiry for the machine in the
+            Tailscale admin console (README, "Tailscale key expiry").
+
+      # A host that is logged out of the tailnet or not connected to its
+      # control plane for 10 minutes: an expired key, a logout, or
+      # tailscaled down. A host Prometheus cannot reach at all is
+      # "Host down" instead.
+      - uid: homelab-tailscale-down
+        title: Tailscale down
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                homelab_tailscale_online
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} is not connected to the tailnet"
+          description: >-
+            Check it on the host with: tailscale status and
+            journalctl -u tailscaled -u tailscale-metrics
+
       # A probed site that does not answer 2xx over valid TLS: Caddy or the
       # service behind it is down, the name does not resolve from the
       # observability host, or the certificate is expired or untrusted.
