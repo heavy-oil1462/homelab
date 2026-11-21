@@ -34,6 +34,10 @@ work in its repository.
   and date (`# 1.37.1, :latest as of 2026-08-04`).
 - Services are tailnet-only by default: nothing new listens on LAN
   interfaces unless an option opts in.
+- Servers' Tailscale node keys do not expire: key expiry is disabled for
+  every server, and for a new one when it joins ("i set all servers to do
+  not expire for now", owner, board, 2026-11-21). An alert catches a key
+  that would expire, and Tailscale being down.
 - Containers run unprivileged: as a dedicated host user with a static id,
   with `no-new-privileges` and all capabilities dropped but those each
   names. Root stays only where the image supports nothing else, on the

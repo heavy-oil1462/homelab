@@ -369,13 +369,14 @@ The example rules alert as "Tailscale key expires soon" 14 days ahead, and
 as "Tailscale down" after 10 minutes offline. Renew a key on the host with
 `tailscale up --force-reauth` while it is still reachable.
 
-A server is better off with key expiry disabled. In the Tailscale admin
-console, open Machines, the machine's `...` menu, and choose Disable key
-expiry; Enable key expiry turns it back on. Nodes logged in with an auth
-key carrying tags, as `tailscale` installs them, have expiry disabled from
-the start; a node logged in as a user gets the tailnet's key expiry (180
-days unless changed in the settings), which is how a server ends up with
-one.
+Every server has key expiry disabled, a step of joining it to the
+tailnet (DIRECTION.md). In the Tailscale admin console, open Machines, the
+new machine's `...` menu, and choose Disable key expiry. Nodes logged in
+with an auth key carrying tags, as `tailscale` installs them, have expiry
+disabled from the start; a node logged in as a user gets the tailnet's key
+expiry (180 days unless changed in the settings), so check the machine
+there after every join. The alert then only fires for a server this step
+was missed on.
 
 ## Secrets
 
