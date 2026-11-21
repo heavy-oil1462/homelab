@@ -4,9 +4,10 @@ Status: Accepted
 
 ## Context
 
-Servers take SSH only on `tailscale0` (`modules/firewall.nix`). Deploys,
-admin logins and, through [ADR-0003](0003-tailscale-identity-for-sign-in.md),
-sign-in all lean on Tailscale. When a server's Tailscale key expired,
+Servers take SSH only on `tailscale0` (`modules/firewall.nix`). Deploys
+and admin logins go over the tailnet, whose identity
+[ADR-0003](0003-tailscale-identity-for-sign-in.md) made the boundary of the
+site's services. When a server's Tailscale key expired,
 the owner nearly lost access to it: a VM has its hypervisor's console, but
 bare metal hosts have no console login, and with Tailscale down nothing
 else reached sshd.
