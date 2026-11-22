@@ -51,7 +51,8 @@ Roles:
   node exporter, fluent-bit log shipping, tailnet-only SSH, and break-glass
   SSH from the LAN with `homelab.network.sshFrom`, see [SSH access](#ssh-access)).
 - `workstation-role`: Hyprland desktop, greetd/tuigreet, pipewire, YubiKey
-  login, libvirt, and the agent sandbox.
+  login, libvirt, the agent sandbox, and shared SSH connections to the
+  hosts in `homelab.workstation.sshSharedHosts`, see [YubiKey](#yubikey).
 
 Services (OCI containers, pinned by digest):
 
@@ -245,7 +246,8 @@ System:
   consistent SQLite snapshots, and each job's last successful run as a
   node exporter metric; restoring is in [docs/backups.md](docs/backups.md)),
   `locale`, `yubikey` (pam_u2f with a
-  host-independent origin), `firewall` (role-based baseline, and
+  host-independent origin, PIN and touch at login and screen lock, touch
+  only for sudo; see [YubiKey](#yubikey)), `firewall` (role-based baseline, and
   SSH from the networks in `homelab.network.sshFrom`), `nvidia` (proprietary driver;
   the host must allow the unfree `nvidia-x11` and `nvidia-settings`, as
   `examples/workstation.nix` does; with `homelab.nvidia.cdiCheck.units`,
@@ -409,6 +411,37 @@ ssh alice@192.0.2.10
 Then repair Tailscale on the host, for example with `tailscale up` and a
 new auth key. Changing who may reach SSH is a change to ask the owner about
 first (DIRECTION.md).
+
+## YubiKey
+
+Workstations ask for the YubiKey once per thing
+(docs/adr/0025-yubikey-prompts-once-per-session.md):
+
+- Login (greetd, the console) and the screen lock (hyprlock) take the
+  key's PIN and a touch, through pam_u2f.
+- sudo takes a touch only, and then no touch for 15 minutes in the same
+  terminal. Enroll the keys with `pamu2fcfg` without `-N`
+  (`pamu2fcfg -o pam://yubikey -i pam://yubikey`); a credential enrolled
+  with `-N` carries `+pin` and makes sudo ask for the PIN as well. `su`
+  keeps the PIN.
+- SSH and git over SSH share one connection per host, port and user for
+  the hosts in `homelab.workstation.sshSharedHosts`: the first command
+  takes the PIN and a touch of the FIDO2 `sk` key, the next ones none.
+  The connection stays open 4 hours after its last session ends, also
+  when the key is unplugged; `ssh -O exit <host>` closes it earlier. List
+  the servers and Forgejo's SSH host:
+
+```nix
+homelab.workstation.sshSharedHosts = [ "server" "nvr" "git.home.example.com" ];
+```
+
+The patterns are matched against the host as typed, so list it as you
+type it in ssh and in Git remotes. The sockets are in `/run/user/<uid>`,
+for `homelab.username` only.
+
+There is no SSH agent: `sk` keys are read from `~/.ssh` and need the key
+plugged in. yubikey-agent was removed, as it serves PIV keys only; hosts
+that set `SSH_AUTH_SOCK` to its socket elsewhere should drop that.
 
 ## Secrets
 
@@ -601,6 +634,12 @@ stand-in for Pocket ID: the sign-in and back, one sign-in for two sites,
 sign-out, forged headers and users who are not let in; the
 `oidc-gate-module` check holds the evaluated service, its socket and the
 configurations the host refuses (docs/adr/0020-oidc-login-gate-at-the-proxy.md).
+The `yubikey-prompts` check holds the example workstation to
+docs/adr/0025-yubikey-prompts-once-per-session.md: `pinverification=1`
+in the PAM stacks of login, greetd and hyprlock, `pinverification=0` with
+`userpresence=1` in sudo's, sudo's 15 minute timestamp, no yubikey-agent,
+and its ssh_config, read by `ssh -G`, sharing connections to a listed
+host and to no other host or user.
 The checks also run the `forgejo-admin` and `forgejo-oidc` scripts
 against stubs, the latter through the rename of a source left from
 tsidp, the `pocket-id-clients` script against nixpkgs' Pocket ID, run

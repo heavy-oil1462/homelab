@@ -351,7 +351,24 @@ in
       type = lib.types.path;
       description = ''
         pam_u2f authfile with the enrolled keys (u2f_keys format). Generate
-        with pamu2fcfg using origin/appid pam://yubikey.
+        with pamu2fcfg using origin/appid pam://yubikey, without -N: the
+        module asks for the PIN at login and screen lock itself, and a
+        credential enrolled with -N ("+pin") would ask for it at sudo too.
+      '';
+    };
+
+    workstation.sshSharedHosts = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "server1" "*.tailnet.example.com" "git.home.example.com" ];
+      description = ''
+        ssh_config host patterns, as typed on the command line, that the
+        workstation's user reaches over one shared connection per host,
+        port and user: the first ssh or git command asks for the YubiKey's
+        PIN and touch, the following ones reuse the connection, and it
+        stays open 4 hours after the last one ends (ControlPersist). The
+        socket is in the user's runtime directory, /run/user/<uid>. List
+        the servers and Forgejo's SSH host. Empty, nothing is shared.
       '';
     };
 

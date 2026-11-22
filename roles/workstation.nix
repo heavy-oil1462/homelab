@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   username = config.homelab.username;
@@ -63,6 +63,19 @@ in
       ];
     })
   ];
+
+  # One PIN and touch per working session to each of the site's hosts
+  # (docs/adr/0025-yubikey-prompts-once-per-session.md). Only the owner's
+  # user: the socket lives in /run/user/<uid>, which a user without a
+  # session (root under sudo) lacks, and ssh exits when it cannot make it.
+  # The Host * after it closes the Match for whatever follows.
+  programs.ssh.extraConfig = lib.mkIf (config.homelab.workstation.sshSharedHosts != [ ]) ''
+    Match originalhost ${lib.concatStringsSep "," config.homelab.workstation.sshSharedHosts} localuser ${username}
+      ControlMaster auto
+      ControlPath /run/user/%i/ssh-%C
+      ControlPersist 4h
+    Host *
+  '';
 
   programs.chromium = {
     enable = true;
