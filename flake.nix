@@ -268,6 +268,12 @@
               everyone6 = with' exampleServer { homelab.network.sshFrom = [ "::/0" ]; };
             };
           };
+        # The example workstation's PAM stacks, sudo timestamp and ssh client
+        # config: PIN at login and screen lock, touch only for sudo, one
+        # shared connection per listed host, no yubikey-agent (ADR-0025).
+        yubikey-prompts = pkgs.callPackage ./tests/yubikey-prompts.nix {
+          config = exampleWorkstation.config;
+        };
         # The forgejo-oidc unit's script against a stubbed podman and systemctl.
         forgejo-oidc = pkgs.callPackage ./tests/forgejo-oidc.nix { };
         # The script declaring Pocket ID's clients, against nixpkgs' Pocket

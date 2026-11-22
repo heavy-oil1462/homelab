@@ -84,3 +84,5 @@ never reaches the workers.
   Pocket ID is the only OIDC provider (Accepted)
 - [ADR-0024](0024-break-glass-ssh-from-the-lan.md): Break-glass SSH from
   the LAN, keys only (Accepted)
+- [ADR-0025](0025-yubikey-prompts-once-per-session.md): YubiKey prompts
+  on workstations: once per session, PIN where it matters (Accepted)

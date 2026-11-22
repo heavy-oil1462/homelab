@@ -20,6 +20,8 @@
       consoleKeyMap = "us";
     };
     yubikey.u2fKeysFile = ./assets/u2f_keys;
+    # The servers by their tailnet names, and Forgejo's SSH host.
+    workstation.sshSharedHosts = [ "server" "nvr" "git.home.example.com" ];
     hyprland = {
       hyprlandLua = ./assets/hypr/hyprland.lua;
       hyprpaperConf = ./assets/hypr/hyprpaper.conf;

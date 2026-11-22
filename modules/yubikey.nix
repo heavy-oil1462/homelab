@@ -1,12 +1,12 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
+# YubiKey login: pam_u2f with PIN and touch at login and screen lock, touch
+# only for sudo (docs/adr/0025-yubikey-prompts-once-per-session.md). SSH uses
+# the key's FIDO2 sk keys directly; there is no agent.
 {
   imports = [ ./options.nix ];
 
   services = {
-    yubikey-agent = {
-      enable = true;
-    };
     pcscd.enable = true;
     udev.packages = [ pkgs.yubikey-personalization pkgs.libfido2 ];
   };
@@ -35,7 +35,20 @@
     su.u2fAuth = true;
     sddm.u2fAuth = true;
     greetd.u2fAuth = true;
+    # sudo takes a touch without the PIN; the session behind it was opened
+    # with both. pinverification=0 turns the PIN off only if the key was
+    # enrolled without -N: a "+pin" credential in u2f_keys asks for it
+    # anyway. userpresence=1 keeps the touch whatever the key's default.
+    sudo.rules.auth.u2f.settings = {
+      pinverification = lib.mkForce 0;
+      userpresence = 1;
+    };
   };
+
+  # A burst of sudo in one terminal is one touch.
+  security.sudo.extraConfig = ''
+    Defaults timestamp_timeout=15
+  '';
 
   environment.etc."u2f_keys".source = config.homelab.yubikey.u2fKeysFile;
 
