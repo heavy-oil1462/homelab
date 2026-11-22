@@ -50,7 +50,7 @@ work in its repository.
   and also its no reason to have huge locks somewhre if the fence is really
   low somewhere else if you get what I mean. It should be resonable level
   of security whole way around for the types of threats that are realistic
-  for me.", owner, question on the security review, 2026-11-22). Changes
+  for me.", owner, board, 2026-11-22). Changes
   that tighten or loosen access stay Ask-the-owner-first.
 - Containers run unprivileged: as a dedicated host user with a static id,
   with `no-new-privileges` and all capabilities dropped but those each
@@ -238,6 +238,11 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   assets when it consumes a config file.
 - Image bumps change the digest and the version comment together.
 - Python under `skills/` and `lib/` follows `skills/README.md`.
+- Scripts run only once during setup, such as a host's install or a key's
+  enrollment, live in `scripts/setup/` of the repository that has them;
+  day-to-day scripts stay in `scripts/` ("push it to scripts. perhaps time
+  for a setup folder or smt for the scripts only used once during setup",
+  owner, board, 2026-11-22).
 
 ## Ask the owner first
 
