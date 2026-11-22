@@ -275,6 +275,33 @@
         pocket-id-clients = pkgs.callPackage ./tests/pocket-id-clients.nix {
           inherit (exampleServer.config.services.pocket-id) package settings;
         };
+        # How long a sign-in to nixpkgs' Pocket ID lasts, with the example
+        # server's settings (a day) and with homelab.pocketId.sessionDuration
+        # at the option's default, which must be Pocket ID's own (an hour).
+        pocket-id-session =
+          let
+            defaultDuration = (exampleServer.extendModules {
+              modules = [{
+                homelab.pocketId.sessionDuration = nixpkgs.lib.mkForce
+                  exampleServer.options.homelab.pocketId.sessionDuration.default;
+              }];
+            }).config;
+          in
+          pkgs.callPackage ./tests/pocket-id-session.nix {
+            inherit (exampleServer.config.services.pocket-id) package;
+            hosts = [
+              {
+                name = "example";
+                inherit (exampleServer.config.services.pocket-id) settings;
+                minutes = 1440;
+              }
+              {
+                name = "default";
+                inherit (defaultDuration.services.pocket-id) settings;
+                minutes = 60;
+              }
+            ];
+          };
         # The example server's Pocket ID, its clients and one more with
         # every default: the spec the unit gets, its ordering before the
         # clients' units, the socket Caddy mounts and the backup.

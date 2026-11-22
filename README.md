@@ -318,7 +318,9 @@ System:
   its files under `/var/lib/secrets`, and restarts its `units`, which
   start after it. Clients added in the admin UI are left alone. Its
   application settings come from the config, with users' own-account
-  editing off (`homelab.pocketId.allowOwnAccountEdit`); set others in
+  editing off (`homelab.pocketId.allowOwnAccountEdit`) and a sign-in
+  lasting `homelab.pocketId.sessionDuration` minutes (60, Pocket ID's
+  default; the example sets 1440, the login gate's 24h); set others in
   `services.pocket-id.settings`. The example declares Forgejo's and Grafana's from their OIDC options once
   their provider is `pocket-id`.
 

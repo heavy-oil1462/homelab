@@ -967,6 +967,20 @@ in
           others in services.pocket-id.settings by their environment names.
         '';
       };
+      sessionDuration = lib.mkOption {
+        type = lib.types.ints.between 1 43200;
+        default = 60;
+        example = 1440;
+        description = ''
+          How long a sign-in to Pocket ID lasts, in minutes, Pocket ID's
+          SESSION_DURATION: the lifetime of its session cookie and access
+          token. Within it, an app that sends the browser to Pocket ID
+          gets the user back without a passkey. The default is Pocket
+          ID's own, an hour; its admin UI takes 1 to 43200 (30 days).
+          Set it to the login gate's homelab.reverseProxy.oidcGate.sessionLifetime,
+          1440 for 24h, to sign in once a day.
+        '';
+      };
       dataDir = lib.mkOption {
         type = lib.types.str;
         default = "/var/lib/pocket-id";

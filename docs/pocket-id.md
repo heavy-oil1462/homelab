@@ -83,7 +83,13 @@ from taking an address no account holds
 Pocket ID and the proxy's login gate then do not build.
 
 Pocket ID's application settings come from the host's config
-(`UI_CONFIG_DISABLED`); its admin UI shows them read-only. Set one by its
+(`UI_CONFIG_DISABLED`); its admin UI shows them read-only. How long a
+sign-in lasts is `homelab.pocketId.sessionDuration`, in minutes
+(`SESSION_DURATION`), an hour by default. Within it an app that sends
+the browser to Pocket ID gets it back without the passkey; after it, the
+passkey is asked again. Setting it to the login gate's
+`homelab.reverseProxy.oidcGate.sessionLifetime`, `1440` for its default
+24h, makes it one sign-in a day. Set others by their
 environment name in `services.pocket-id.settings`, such as
 `ALLOW_USER_SIGNUPS = "withToken";` for sign up links, which let the new
 user choose their own email once.
