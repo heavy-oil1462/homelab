@@ -86,3 +86,5 @@ never reaches the workers.
   the LAN, keys only (Accepted)
 - [ADR-0025](0025-yubikey-prompts-once-per-session.md): YubiKey prompts
   on workstations: once per session, PIN where it matters (Accepted)
+- [ADR-0026](0026-servers-ssh-through-sshd-only.md): Servers take SSH
+  through sshd only, not Tailscale SSH (Accepted)

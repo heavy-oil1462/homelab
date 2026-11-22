@@ -268,6 +268,32 @@
               everyone6 = with' exampleServer { homelab.network.sshFrom = [ "::/0" ]; };
             };
           };
+        # Servers take SSH through sshd only: the example server has no
+        # --ssh and turns Tailscale SSH off once nobody uses it, the
+        # workstation keeps it, and a server left with no sshd on the
+        # tailnet fails the build (ADR-0026). Then the unit's script against
+        # tailscaled and a stub of its counters.
+        tailscale-ssh-off =
+          let
+            with' = host: module: (host.extendModules { modules = [ module ]; }).config;
+          in
+          pkgs.callPackage ./tests/tailscale-ssh-off.nix {
+            server = exampleServer.config;
+            workstation = exampleWorkstation.config;
+            serverSsh = with' exampleServer { homelab.tailscale.ssh = nixpkgs.lib.mkForce true; };
+            broken = {
+              noSshd = with' exampleServer {
+                services.openssh.enable = nixpkgs.lib.mkForce false;
+                homelab.deployCaKeys = nixpkgs.lib.mkForce [ ];
+              };
+              loopbackOnly = with' exampleServer {
+                services.openssh.listenAddresses = nixpkgs.lib.mkForce [{ addr = "127.0.0.1"; port = 22; }];
+              };
+              closedOnTailnet = with' exampleServer {
+                networking.firewall.interfaces.tailscale0.allowedTCPPorts = nixpkgs.lib.mkForce [ 9100 ];
+              };
+            };
+          };
         # The example workstation's PAM stacks, sudo timestamp and ssh client
         # config: PIN at login and screen lock, touch only for sudo, one
         # shared connection per listed host, no yubikey-agent (ADR-0025).

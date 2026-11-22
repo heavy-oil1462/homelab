@@ -47,8 +47,9 @@ RFC 5737 documentation ranges.
 
 Roles:
 
-- `server-role`: headless VM baseline (grub, DHCP, podman, tailscale,
-  node exporter, fluent-bit log shipping, tailnet-only SSH, and break-glass
+- `server-role`: headless VM baseline (grub, DHCP, podman, tailscale
+  without Tailscale SSH, node exporter, fluent-bit log shipping,
+  tailnet-only SSH through sshd, and break-glass
   SSH from the LAN with `homelab.network.sshFrom`, see [SSH access](#ssh-access)).
 - `workstation-role`: Hyprland desktop, greetd/tuigreet, pipewire, YubiKey
   login, libvirt, the agent sandbox, and shared SSH connections to the
@@ -255,8 +256,9 @@ System:
   every start and write it again when it mounts another driver, see
   [docs/nvidia.md](docs/nvidia.md)), `vm-disko` (single-disk VM layout; needs
   disko's NixOS module from your own flake, as `examples/vm.nix` shows),
-  `tailscale` (joins the tailnet with a one-off auth key at install; with
-  the node exporter on, writes the node key's expiry and whether the node
+  `tailscale` (joins the tailnet with a one-off auth key at install; runs
+  Tailscale SSH on workstations only, and turns it off on servers, see
+  [SSH access](#ssh-access); with the node exporter on, writes the node key's expiry and whether the node
   is online every 5 minutes, see
   [Tailscale key expiry](#tailscale-key-expiry)), `logging-agent` (fluent-bit ships the journal to Loki at
   `homelab.logsHost`; see [Logs](#logs)), `observability-agent` (node exporter with
@@ -357,8 +359,9 @@ as each value of a label is a stream of its own.
 ## Tailscale key expiry
 
 Servers take SSH on the tailnet only, so a node key that expires cuts the
-host off until someone logs it in again at its console, or over SSH from
-the LAN where `homelab.network.sshFrom` allows it ([SSH access](#ssh-access)). On every host
+host off until someone logs it in again at its console, or through the same
+sshd from the LAN where `homelab.network.sshFrom` allows it
+([SSH access](#ssh-access)). On every host
 with the `tailscale` and `observability-agent` modules, the
 `tailscale-metrics` unit reads `tailscale status --json` every 5 minutes,
 and at boot once tailscaled has had 2 minutes, and writes for the node
@@ -387,10 +390,21 @@ was missed on.
 
 ## SSH access
 
-Servers take SSH on `tailscale0`, and deploys and admin SSH go over the
+Servers have one SSH gate: sshd, which takes the keys in
+`homelab.adminKeys` and, for root, deploy CA certificates. They do not run
+Tailscale SSH, so the tailnet login opens no shell
+(docs/adr/0026-servers-ssh-through-sshd-only.md). `homelab.tailscale.ssh`
+is off for the server role and on elsewhere. On a server that ran it, the
+`tailscale-ssh-off` unit runs `tailscale set --ssh=false` once no
+Tailscale SSH session has been open, and none started, for 10 minutes, so
+a deploy over it finishes first; an idle shared connection to the host is
+reset then, and ssh opens a new one to sshd. A server with it off must
+have sshd on the tailnet, as the server role has, or it fails to build.
+
+sshd takes port 22 on `tailscale0`, and deploys and admin SSH go over the
 tailnet. For when Tailscale is down, such as after a node key expired,
-`homelab.network.sshFrom` lists the LAN's admin subnets that may reach
-port 22 on any other interface
+`homelab.network.sshFrom` lists the LAN's admin subnets that may reach the
+same sshd on port 22 on any other interface
 (docs/adr/0024-break-glass-ssh-from-the-lan.md):
 
 ```nix
@@ -620,6 +634,11 @@ query with promtool and tests the vulnerability and Tailscale rules in
 it. The `tailscale-metrics` check runs the Tailscale metrics script
 against nixpkgs' tailscaled, logged out, and against its status with a
 key expiry, with none, and with an expired key.
+The `tailscale-ssh-off` check holds the example server to
+docs/adr/0026-servers-ssh-through-sshd-only.md: no `--ssh`, the
+`tailscale-ssh-off` unit, and a failed build without sshd on the tailnet,
+while the workstation keeps `--ssh`; and it runs the unit's script against
+nixpkgs' tailscaled and a stub of its session counters.
 The `logging-labels` check holds the example server's fluent-bit config to
 the [log labels](#logs) and runs it against a stand-in for Loki: a
 container's line labelled with unit and container, a host service's with
