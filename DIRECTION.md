@@ -41,6 +41,17 @@ work in its repository.
 - Break-glass access: when Tailscale is down, the servers take SSH on port
   22 from the LAN admin subnet, keys only (owner, question 01a2001c-d9ed,
   2026-11-21; ADR-0024). SSH access stays an Ask-the-owner-first change.
+- Security is proportionate and even: each layer is sized to the threats
+  realistic for a single-owner homelab, namely laptop theft, burglary, a
+  compromised LAN or IoT device, phishing and malware on a workstation. No
+  strong lock where the fence is low elsewhere; the weakest path decides.
+  The owner authenticates once per thing, not repeatedly for the same
+  access ("Its no reason to atuhenticate everal times for the same thing
+  and also its no reason to have huge locks somewhre if the fence is really
+  low somewhere else if you get what I mean. It should be resonable level
+  of security whole way around for the types of threats that are realistic
+  for me.", owner, question on the security review, 2026-11-22). Changes
+  that tighten or loosen access stay Ask-the-owner-first.
 - Containers run unprivileged: as a dedicated host user with a static id,
   with `no-new-privileges` and all capabilities dropped but those each
   names. Root stays only where the image supports nothing else, on the
