@@ -246,6 +246,23 @@ in
       '';
     };
 
+    tailscale.ssh = lib.mkOption {
+      type = lib.types.bool;
+      default = config.homelab.network.role != "server";
+      defaultText = lib.literalExpression ''config.homelab.network.role != "server"'';
+      description = ''
+        Run Tailscale SSH (`tailscale up --ssh`), which takes port 22 on the
+        tailnet address and lets in whom the tailnet's ACL allows. Off on
+        servers, where sshd with the owner's keys and the deploy CA is the
+        one SSH gate (docs/adr/0026-servers-ssh-through-sshd-only.md); on
+        elsewhere, as before. Off, a node that runs it has it turned off by
+        the tailscale-ssh-off unit once no Tailscale SSH session has been
+        open for 10 minutes, so a deploy over it is not cut off. A server
+        with it off must have sshd listening beyond loopback with its port
+        open on tailscale0, as the server role has.
+      '';
+    };
+
     backups.resticRepo = lib.mkOption {
       type = lib.types.str;
       example = "rclone:gdrive:my-backup";

@@ -42,6 +42,11 @@
     # (docs/adr/0024-break-glass-ssh-from-the-lan.md). Left empty here; the
     # break-glass-ssh check evaluates this host with it set:
     # network.sshFrom = [ "192.0.2.0/24" ];
+    # No Tailscale SSH: sshd is the server's one SSH gate, and the
+    # tailscale-ssh-off unit turns Tailscale SSH off on a node that still
+    # runs it (docs/adr/0026-servers-ssh-through-sshd-only.md). The server
+    # role's default; workstations keep it.
+    tailscale.ssh = false;
     # GPU load for the GPU dashboard, from the NVIDIA driver the nvidia module
     # installs. Prometheus scrapes it on port 9835 over the tailnet, through
     # observability.nvidiaGpuTargets below.

@@ -22,8 +22,9 @@ in
 
     (lib.mkIf (cfg.role == "server") {
       # SSH is tailnet-only. Deploys and admin SSH go over Tailscale (the bare
-      # hostnames resolve to the tailnet IP), so the LAN no longer needs port
-      # 22. Console access via the hypervisor remains as a recovery path for
+      # hostnames resolve to the tailnet IP) to sshd, since servers do not
+      # run Tailscale SSH (docs/adr/0026-servers-ssh-through-sshd-only.md),
+      # so the LAN no longer needs port 22. Console access via the hypervisor remains as a recovery path for
       # VMs if Tailscale is ever down. Bare metal hosts have no console login,
       # so they join the tailnet at install time (modules/tailscale.nix).
       # homelab.network.sshFrom adds break-glass access from the LAN below.
