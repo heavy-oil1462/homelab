@@ -77,10 +77,13 @@
     # and Grafana sign in through it: a service with OIDC turned on below
     # declares its client here, and pocket-id-clients writes the client's
     # id and secret files and restarts the units that read them. Only
-    # alice's tailnet login reaches its first-admin setup.
+    # alice's tailnet login reaches its first-admin setup. A sign-in lasts
+    # as long as the login gate's, 24h, so the passkey is needed once a
+    # day.
     pocketId = {
       enable = true;
       setupLogins = [ "alice@github" ];
+      sessionDuration = 1440;
       clients = lib.mkMerge [
         (lib.mkIf config.homelab.forgejo.oidc.enable {
           forgejo = {

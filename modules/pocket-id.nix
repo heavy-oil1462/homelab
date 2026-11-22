@@ -87,6 +87,9 @@ in
         # disabled.
         UI_CONFIG_DISABLED = true;
         ALLOW_OWN_ACCOUNT_EDIT = cfg.allowOwnAccountEdit;
+        # In minutes; Pocket ID sets its cookie's Max-Age and its access
+        # token's expiry from it.
+        SESSION_DURATION = cfg.sessionDuration;
       };
       # Read by systemd as root (LoadCredential), so the files stay root's.
       credentials = {
