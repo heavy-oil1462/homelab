@@ -243,6 +243,13 @@ Loki over HTTP. Individual decisions go in `docs/adr`.
   day-to-day scripts stay in `scripts/` ("push it to scripts. perhaps time
   for a setup folder or smt for the scripts only used once during setup",
   owner, board, 2026-11-22).
+- Setup is hands-free: an owner step is one command, a script in
+  `scripts/setup/`, that places files, keys and permissions itself and asks
+  only for what only the owner has (a YubiKey touch or PIN, a password, a
+  consent in a browser). Docs never ask the owner to create files, folders
+  or modes by hand ("as mentioned earlier I want setup to always be as easy
+  and handsfree as possible. Avoid manual fiddeling with files, folders
+  keys, chmod etc etc.", owner, board, 2026-11-22).
 
 ## Ask the owner first
 
