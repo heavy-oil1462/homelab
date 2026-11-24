@@ -356,7 +356,7 @@ in
     };
 
     grafana = {
-      image = "docker.io/grafana/grafana@sha256:0615ec4fbd4072004b7d86b46ded63013a74b7d6eb1119273dd89e8fa25c13cf"; # 13.3.1, :latest as of 2026-11-14
+      image = "docker.io/grafana/grafana@sha256:81556409ba48b2b922e0adb69a2511337d8ba7578f11962eefa6149a2d815101"; # 13.3.1, :latest as of 2026-11-24
       user = "${toString config.users.users.grafana.uid}:${toString config.users.groups.grafana.gid}";
       autoStart = true;
       extraOptions = hardening;
