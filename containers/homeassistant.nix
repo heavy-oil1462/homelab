@@ -69,7 +69,7 @@ in
     # Upgrading from 2026.6 or earlier migrates /config/.storage one way
     # (device registry 3.4); going back means restoring .storage from a
     # backup (README).
-    image = "ghcr.io/home-assistant/home-assistant@sha256:493a07e8f6530fc640223f4a0a5248f20a61ca2f718bb1d31efbf08a2c5ea28f"; # 2026.11.2, :stable as of 2026-11-18
+    image = "ghcr.io/home-assistant/home-assistant@sha256:24e541ddae5818bf8eb27898b9ba00d0c344a655aa5097e9e9bd4b19356be847"; # 2026.11.3, :stable as of 2026-11-23
     autoStart = true;
     # Runs as root: the image's s6-overlay init and Home Assistant itself
     # expect root, and with host networking it reaches the LAN's devices
