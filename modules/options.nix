@@ -379,6 +379,66 @@ in
       };
     };
 
+    backups.restoreTest = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Restore the latest snapshot of every backup job on a schedule, as
+          the restic-restore-test unit and timer, and check that the data
+          comes back whole and usable: restic restore --verify, the file
+          count and size against the snapshot's summary, PRAGMA
+          integrity_check of each of the job's SQLite databases and git
+          fsck of every git repository restored. A job fails when its
+          latest snapshot is over 2 days old. Each job's result goes to the
+          node exporter's textfile collector as
+          homelab_backup_restore_test_ok and the times of the last run and
+          the last success, which the example's "Backup restore test
+          failed" rule alerts on. Start it by hand with
+          `systemctl start restic-restore-test`. Off, its last results are
+          removed on the next rebuild
+          (docs/adr/0027-backups-are-restore-tested-monthly.md).
+        '';
+      };
+
+      schedule = lib.mkOption {
+        type = lib.types.str;
+        default = "Sun *-*-01..07 05:00:00";
+        example = "Sat *-*-01..07 14:00:00";
+        description = ''
+          When the restore test runs, as a systemd OnCalendar value, started
+          at a random point in the hour after it: by default the first
+          Sunday of the month, an hour after the repository check's
+          default. Missed runs are caught up after boot (Persistent). The
+          example alert expects a success at least every 40 days.
+        '';
+      };
+
+      gitFsckTimeout = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 3600;
+        example = 7200;
+        description = ''
+          Seconds git fsck may take over all of one job's git repositories
+          together. A job whose repositories take longer fails its test.
+        '';
+      };
+
+      scratchDir = lib.mkOption {
+        type = lib.types.str;
+        default = "/var/tmp/restic-restore-test";
+        example = "/srv/scratch/restic-restore-test";
+        description = ''
+          Where each job is restored, into <scratchDir>/<job>, one job at a
+          time, and removed after it, also when the test fails. It needs
+          room for the largest job. Under /var/tmp or /tmp it is in the
+          unit's own private directory (PrivateTmp), which systemd removes
+          when the unit stops. It must be an absolute path apart from every
+          job's paths, so a restore never lands on live data.
+        '';
+      };
+    };
+
     vulnerabilityScan = {
       enable = lib.mkOption {
         type = lib.types.bool;
