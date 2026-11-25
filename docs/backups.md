@@ -20,7 +20,8 @@ same path under `/var/backup/<job>/`, so the snapshot holds a consistent copy
 at `/var/backup/forgejo/var/lib/forgejo/data/gitea.db` and no live database
 file. Everything else in `paths` is copied as it is at that moment. A git
 push during a run can therefore leave a repository half copied; check
-repositories with `git fsck` after a restore, as below.
+repositories with `git fsck` after a restore, as below. The monthly
+restore test (below) does both checks on every job's latest snapshot.
 
 Retention is 7 daily, 4 weekly, 6 monthly and 1 yearly snapshot per job.
 
@@ -118,6 +119,92 @@ against the repository (`sudo restic-vaultwarden repair index`). A site's
 own config may wrap the steps in one script, such as homelab-config's
 `scripts/setup/restic-repair.sh`, which the example rule's summary names.
 After the repair, run `systemctl start restic-check` so the alert clears.
+
+## Restore test
+
+The repository check proves the repository is sound, not that a job's data
+comes back usable. So the `restic-restore-test` unit restores every job,
+Vaultwarden's included, and checks it, on the first Sunday of the month at
+05:00, started at a random point in the hour after, and at the next boot
+when the host was down then (ADR-0027). For each job, one at a time, it:
+
+1. takes the job's latest snapshot of this host (`--tag <job>`), and fails
+   the job when there is none or it is over 2 days old;
+2. restores it with `restic restore --verify` into
+   `/var/tmp/restic-restore-test/<job>`, reading every restored file back
+   against the snapshot's content hashes, and compares the number of files
+   and their total size with the summary restic kept in the snapshot;
+3. runs `PRAGMA integrity_check` on each of the job's database copies
+   (under `/var/backup/<job>/` in the snapshot), which must say `ok` and
+   have at least one table;
+4. runs `git fsck --no-dangling` on every git repository restored, bare or
+   not, such as Forgejo's, all within an hour per job;
+5. removes the scratch directory, also when a step failed.
+
+The scratch directory is in the unit's own `/var/tmp`, which systemd
+removes when the unit stops, and is never one of the jobs' paths. It needs
+room for the largest job, and the test downloads each job's latest
+snapshot in full from the remote once a month. It uses the jobs' password,
+rclone credentials and lock-waiting restic. It is on wherever the backups
+module is; change it with `homelab.backups.restoreTest.schedule`,
+`homelab.backups.restoreTest.gitFsckTimeout` (seconds),
+`homelab.backups.restoreTest.scratchDir` (somewhere with more room), or
+turn it off with `homelab.backups.restoreTest.enable = false`, which
+removes its last results too.
+
+To run it now and read the result:
+
+```sh
+systemctl start restic-restore-test
+journalctl -u restic-restore-test -n 50
+cat /var/lib/prometheus-node-exporter/textfile/homelab_restore_test.prom
+```
+
+`systemctl start` returns when every job is done. The journal has one line
+per job, its summary:
+
+```
+forgejo: snapshot 3f2a91c0 of 2026-11-29T03:12:44Z, 5121 files, 812.4 MiB restored and verified, 1 databases ok, 37 git repositories ok
+```
+
+or why it failed:
+
+```
+pocket-id: FAILED: database /var/lib/pocket-id/data/pocket-id.db fails its integrity check: ...
+```
+
+and the unit fails when any job did. The metrics file has, per job
+(`backup_job="<job>"`), also after a failure:
+
+- `homelab_backup_restore_test_ok`: 1 when the last test passed, 0 when it
+  failed.
+- `homelab_backup_restore_test_last_run_timestamp_seconds`: when it last
+  ran.
+- `homelab_backup_restore_test_last_success_timestamp_seconds`: when it
+  last passed; a failure keeps the earlier value.
+- `homelab_backup_restore_test_restored_bytes`: the bytes it restored,
+  when the restore got that far.
+
+The example's "Backup restore test failed" rule alerts, as critical, for a
+declared job whose last test failed or that has not passed in 40 days; the
+generic "Failed systemd unit" rule leaves the unit out.
+
+What a failure means:
+
+- *no snapshot* or *older than 48 hours*: the job has stopped backing up;
+  see its unit, `journalctl -u restic-backups-<job>`.
+- *restic restore --verify ... failed*: restic names the file or blob it
+  could not restore; run `systemctl start restic-check`, and repair the
+  repository as under "Repository check".
+- *restored N files, the snapshot has M*: the restore is incomplete; as
+  above.
+- *database ... fails its integrity check* or *has no tables*: the job's
+  copy of the database is broken. Check the live database with
+  `sqlite3 <path> 'PRAGMA integrity_check'`; once it is sound, run the
+  job (`systemctl start restic-backups-<job>`) and the test again.
+- *git fsck of ... failed*: the repository was copied mid-push, or is
+  broken on the host too. Run `git fsck` on the live repository; if that
+  passes, run the job and the test again.
 
 ## Commands
 

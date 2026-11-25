@@ -26,9 +26,9 @@ groups:
     folder: Homelab
     interval: 1m
     rules:
-      # Any systemd unit in the failed state. Backup units and the backup
-      # repository check are left out here and alert as critical in their
-      # own rules below.
+      # Any systemd unit in the failed state. Backup units, the backup
+      # repository check and the restore test are left out here and alert
+      # as critical in their own rules below.
       - uid: homelab-unit-failed
         title: Failed systemd unit
         condition: C
@@ -40,7 +40,7 @@ groups:
               refId: A
               instant: true
               expr: |-
-                node_systemd_unit_state{state="failed", name!~"restic-backups-.*|restic-check\\.service"} == 1
+                node_systemd_unit_state{state="failed", name!~"restic-backups-.*|restic-check\\.service|restic-restore-test\\.service"} == 1
           - refId: C
             datasourceUid: __expr__
             model:
@@ -219,6 +219,56 @@ groups:
             which homelab-config's scripts/setup/restic-repair.sh runs;
             docs/backups.md has the commands. Run the check again after it
             with: systemctl start restic-check
+
+      # A backup job whose data did not come back whole and usable, or has
+      # not in 40 days. modules/backups.nix restores every job's latest
+      # snapshot monthly (homelab.backups.restoreTest), with restic restore
+      # --verify, sqlite3's integrity check and git fsck, and writes
+      # homelab_backup_restore_test_ok and
+      # homelab_backup_restore_test_last_success_timestamp_seconds per job
+      # through the node exporter's textfile collector, on failure too
+      # (docs/adr/0027-backups-are-restore-tested-monthly.md). A failed test
+      # is 1, an overdue one its age in seconds; 40 days fits the monthly
+      # schedule with a few days' slack. Only jobs the host still declares
+      # alert. A job whose test has never run has no series and does not.
+      - uid: homelab-backup-restore-test-failed
+        title: Backup restore test failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                (
+                  ((1 - homelab_backup_restore_test_ok) == 1)
+                    or ((time() - homelab_backup_restore_test_last_success_timestamp_seconds) > 3456000)
+                ) and on (instance, backup_job) homelab_backup_job_info
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Restore test of backup {{ $labels.backup_job }} on {{ $labels.instance }} failed or is overdue: journalctl -u restic-restore-test"
+          description: >-
+            Read why with: journalctl -u restic-restore-test. Each job logs
+            one line, its summary or the reason it failed: no recent
+            snapshot, a file restic could not restore and verify, a
+            database that fails its integrity check, or a git repository
+            that fails git fsck. docs/backups.md, "Restore test", says what
+            to do for each. Run the test again with:
+            systemctl start restic-restore-test
 
       # A container whose image has a known CRITICAL or HIGH vulnerability
       # with a fixed version out: a bump of its image is worth doing soon.

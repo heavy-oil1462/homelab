@@ -88,3 +88,5 @@ never reaches the workers.
   on workstations: once per session, PIN where it matters (Accepted)
 - [ADR-0026](0026-servers-ssh-through-sshd-only.md): Servers take SSH
   through sshd only, not Tailscale SSH (Accepted)
+- [ADR-0027](0027-backups-are-restore-tested-monthly.md): Backups are
+  restore-tested monthly, automatically (Accepted)

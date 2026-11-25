@@ -165,11 +165,74 @@ tests:
               instance: server4:9100
               job: node-exporter
 
-  # A failed restic-check unit alerts in the rule above, not as a failed
-  # unit; any other failed unit does.
+  # The restore test: server1's forgejo passes monthly and keeps up, so it
+  # never alerts. Its vaultwarden fails after a day and alerts at once.
+  # server2's forgejo passed at time 0 and then stopped running, so it
+  # alerts 40 days later. server2's old job failed but is no longer
+  # declared, and does not alert.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_backup_job_info{instance="server1:9100", job="node-exporter", backup_job="forgejo"}'
+        values: '1x58500'
+      - series: 'homelab_backup_job_info{instance="server1:9100", job="node-exporter", backup_job="vaultwarden"}'
+        values: '1x58500'
+      - series: 'homelab_backup_job_info{instance="server2:9100", job="node-exporter", backup_job="forgejo"}'
+        values: '1x58500'
+      - series: 'homelab_backup_restore_test_ok{instance="server1:9100", job="node-exporter", backup_job="forgejo"}'
+        values: '1x58500'
+      - series: 'homelab_backup_restore_test_last_success_timestamp_seconds{instance="server1:9100", job="node-exporter", backup_job="forgejo"}'
+        values: '0+60x58500'
+      - series: 'homelab_backup_restore_test_ok{instance="server1:9100", job="node-exporter", backup_job="vaultwarden"}'
+        values: '1x1440 0x57060'
+      - series: 'homelab_backup_restore_test_last_success_timestamp_seconds{instance="server1:9100", job="node-exporter", backup_job="vaultwarden"}'
+        values: '0x58500'
+      - series: 'homelab_backup_restore_test_ok{instance="server2:9100", job="node-exporter", backup_job="forgejo"}'
+        values: '1x58500'
+      - series: 'homelab_backup_restore_test_last_success_timestamp_seconds{instance="server2:9100", job="node-exporter", backup_job="forgejo"}'
+        values: '0x58500'
+      - series: 'homelab_backup_restore_test_ok{instance="server2:9100", job="node-exporter", backup_job="removed"}'
+        values: '0x58500'
+    alert_rule_test:
+      - eval_time: 1d
+        alertname: homelab-backup-restore-test-failed
+        exp_alerts: []
+      - eval_time: 1d20m
+        alertname: homelab-backup-restore-test-failed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              instance: server1:9100
+              job: node-exporter
+              backup_job: vaultwarden
+      - eval_time: 39d23h
+        alertname: homelab-backup-restore-test-failed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              instance: server1:9100
+              job: node-exporter
+              backup_job: vaultwarden
+      - eval_time: 40d20m
+        alertname: homelab-backup-restore-test-failed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              instance: server1:9100
+              job: node-exporter
+              backup_job: vaultwarden
+          - exp_labels:
+              severity: critical
+              instance: server2:9100
+              job: node-exporter
+              backup_job: forgejo
+
+  # Failed restic-check and restic-restore-test units alert in the rules
+  # above, not as failed units; any other failed unit does.
   - interval: 1m
     input_series:
       - series: 'node_systemd_unit_state{instance="host:9100", job="node-exporter", name="restic-check.service", state="failed"}'
+        values: '1x20'
+      - series: 'node_systemd_unit_state{instance="host:9100", job="node-exporter", name="restic-restore-test.service", state="failed"}'
         values: '1x20'
       - series: 'node_systemd_unit_state{instance="host:9100", job="node-exporter", name="example.service", state="failed"}'
         values: '1x20'
