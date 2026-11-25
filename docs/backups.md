@@ -66,6 +66,59 @@ and in Prometheus, the hours since each job last succeeded:
 (time() - homelab_backup_last_success_timestamp_seconds) / 3600
 ```
 
+## Repository check
+
+A damaged repository does not stop the jobs: with a data pack missing,
+`restic backup` still saves snapshots, and the damage shows only when a
+prune, a restore or a check reads that pack. So the `restic-check` unit runs
+`restic check --read-data-subset=5%` against `homelab.backups.resticRepo`
+every Sunday at 04:00, started at a random point in the hour after, and at
+the next boot when the host was down then. It checks the repository's
+structure and every index, and downloads and verifies a random 5% of the
+data packs, so weekly checks reach most of the data within a year.
+
+It uses the jobs' password, rclone credentials and restic, which waits for
+the repository lock: the check locks the repository exclusively, so it
+waits for a running job, and a job started meanwhile waits for it. It is on
+wherever the backups module is; change it with
+`homelab.backups.check.schedule` (an OnCalendar value, best kept apart from
+the jobs' schedules), `homelab.backups.check.readDataSubset` (`10%`, `1/4`
+or `500M`) or turn it off with `homelab.backups.check.enable = false`, which
+removes its last result too.
+
+Each run writes `homelab_restic_check.prom` into the textfile directory,
+also when the check fails:
+
+- `homelab_backup_check_last_run_timestamp_seconds`: when it last ran.
+- `homelab_backup_check_last_success_timestamp_seconds`: when it last
+  passed. A failed check keeps the earlier value; it is missing until the
+  first check passes.
+- `homelab_backup_check_ok`: 1 when the last check passed, 0 when it failed.
+
+A failed check also leaves the `restic-check` unit failed. The example's
+"Backup repository check failed" rule alerts, as critical, when the last
+check failed or when none has passed in 9 days; the generic "Failed systemd
+unit" rule leaves the unit out. A host whose check has never run has no
+metrics and does not alert.
+
+To run it by hand and read the result:
+
+```sh
+systemctl start restic-check
+journalctl -u restic-check -n 50
+cat /var/lib/prometheus-node-exporter/textfile/homelab_restic_check.prom
+```
+
+When it fails, restic names what it found, for example
+`pack b31c244ab1...: does not exist`. Repair the repository before the next
+prune, as restic's troubleshooting guide describes: `restic repair index`,
+then `restic repair snapshots --forget` for the snapshots that referred to
+the lost data, then `restic check` again. The jobs' wrappers run these
+against the repository (`sudo restic-vaultwarden repair index`). A site's
+own config may wrap the steps in one script, such as homelab-config's
+`scripts/setup/restic-repair.sh`, which the example rule's summary names.
+After the repair, run `systemctl start restic-check` so the alert clears.
+
 ## Commands
 
 Every job installs a wrapper, `restic-<job>`, that runs restic with the

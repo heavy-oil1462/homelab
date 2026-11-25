@@ -24,6 +24,15 @@
 # from one that does not exist. The label is backup_job, not job, which
 # Prometheus sets to the scrape job's name.
 #
+# A damaged repository (a missing pack, say) does not stop the jobs: backup
+# still saves snapshots, and only a prune, a restore or a check notices. So
+# the restic-check unit checks the repository weekly
+# (homelab.backups.check), reading a share of its data, and writes
+#   homelab_backup_check_last_run_timestamp_seconds
+#   homelab_backup_check_last_success_timestamp_seconds
+#   homelab_backup_check_ok
+# into the same directory, on success and on failure.
+#
 # Secrets are provisioned out of band at runtime (never committed) and shared
 # by all jobs:
 #   /var/lib/secrets/restic-password  the restic repository password
@@ -45,6 +54,12 @@ let
   resticWaiting = pkgs.writeShellScriptBin "restic" ''
     exec ${lib.getExe pkgs.restic} --retry-lock 12h "$@"
   '';
+
+  passwordFile = "/var/lib/secrets/restic-password";
+  environmentFile = "/var/lib/secrets/rclone.env";
+
+  checkScript = pkgs.callPackage ./backup-check-script.nix { };
+  checkMetrics = "${textfileDir}/homelab_restic_check.prom";
 
   staging = name: "/var/backup/${name}";
 
@@ -111,8 +126,7 @@ let
 
   mkJob = name: job: {
     repository = cfg.resticRepo;
-    passwordFile = "/var/lib/secrets/restic-password";
-    environmentFile = "/var/lib/secrets/rclone.env";
+    inherit passwordFile environmentFile;
     package = resticWaiting;
 
     # Create the repository on the first run if it does not exist yet.
@@ -186,14 +200,58 @@ in
   # Staging dir for the consistent database copies taken before each run,
   # and the list of declared jobs for the textfile collector. The link
   # follows the jobs on every rebuild.
+  # With the check off, its last result is removed, so it does not alert
+  # as overdue.
   systemd.tmpfiles.rules = [
     "d /var/backup 0700 root root -"
     "L+ ${textfileDir}/homelab_backup_jobs.prom - - - - ${jobInfo}"
-  ];
+  ] ++ lib.optional (!cfg.check.enable) "r ${checkMetrics}";
 
   services.restic.backups = lib.mapAttrs mkJob jobs;
 
-  systemd.services = lib.mapAttrs'
-    (name: _: lib.nameValuePair "restic-backups-${name}" { postStart = recordSuccess name; })
-    jobs;
+  systemd.services = lib.mkMerge [
+    (lib.mapAttrs'
+      (name: _: lib.nameValuePair "restic-backups-${name}" { postStart = recordSuccess name; })
+      jobs)
+
+    # The weekly check of the repository, with the jobs' credentials and
+    # their restic, which waits for the lock: restic check locks the
+    # repository exclusively, so it waits for a running job, and a job
+    # started meanwhile waits for it. restic check makes a temporary cache
+    # under RESTIC_CACHE_DIR and removes it when done.
+    (lib.mkIf cfg.check.enable {
+      restic-check = {
+        description = "Check the restic backup repository";
+        wants = [ "network-online.target" ];
+        after = [ "network-online.target" ];
+        path = [ resticWaiting ];
+        environment = {
+          RESTIC_REPOSITORY = cfg.resticRepo;
+          RESTIC_PASSWORD_FILE = passwordFile;
+          RESTIC_CACHE_DIR = "/var/cache/restic-check";
+        };
+        # A rebuild does not start a check, nor stop one that runs.
+        restartIfChanged = false;
+        serviceConfig = {
+          Type = "oneshot";
+          EnvironmentFile = environmentFile;
+          ExecStart = "${checkScript}/bin/restic-check ${lib.escapeShellArgs [ cfg.check.readDataSubset textfileDir ]}";
+          PrivateTmp = true;
+          CacheDirectory = "restic-check";
+          CacheDirectoryMode = "0700";
+        };
+      };
+    })
+  ];
+
+  # Spread over an hour; Persistent runs a check missed while the host was
+  # down at the next boot.
+  systemd.timers.restic-check = lib.mkIf cfg.check.enable {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = cfg.check.schedule;
+      Persistent = true;
+      RandomizedDelaySec = "1h";
+    };
+  };
 }
