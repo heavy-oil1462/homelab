@@ -182,12 +182,12 @@ test_job() {
       reason="the database copy $staging/$job$db is not in snapshot $short"
       return 1
     fi
-    result=$(sqlite3 -bail "$copy" 'PRAGMA integrity_check;' 2>&1) || true
+    result=$(sqlite3 -bail "$copy" <<< 'PRAGMA integrity_check;' 2>&1) || true
     if [ "$result" != ok ]; then
       reason="database $db fails its integrity check: $(head -n 3 <<< "$result" | tr '\n' ' ')"
       return 1
     fi
-    tables=$(sqlite3 -bail "$copy" "SELECT count(*) FROM sqlite_schema WHERE type = 'table';" 2>&1) || true
+    tables=$(sqlite3 -bail "$copy" <<< "SELECT count(*) FROM sqlite_schema WHERE type = 'table';" 2>&1) || true
     case "$tables" in *[!0-9]* | "" | 0)
       reason="database $db has no tables"
       return 1 ;;
