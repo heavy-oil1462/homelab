@@ -206,6 +206,15 @@
         # The tailscale-metrics script against the real tailscaled logged
         # out and samples of its status with an expiry, none and expired.
         tailscale-metrics = pkgs.callPackage ./tests/tailscale-metrics.nix { };
+        # The restic-check script against a local restic repository, sound
+        # and with a data pack deleted, and the example server's unit and
+        # timer for it, and with the check off.
+        backup-check = pkgs.callPackage ./tests/backup-check.nix {
+          config = exampleServer.config;
+          off = (exampleServer.extendModules {
+            modules = [{ homelab.backups.check.enable = false; }];
+          }).config;
+        };
         # The example's alert rules in promtool: every query parses, and the
         # vulnerability and Tailscale rules alert on what they should.
         alert-rules = pkgs.callPackage ./tests/alert-rules.nix { };

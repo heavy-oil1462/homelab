@@ -90,7 +90,8 @@ Services (OCI containers, pinned by digest):
   site names to Caddy's tailnet address (with Tailscale DNS, a split-DNS
   record for the domain). `examples/assets/grafana-alerting.yaml` alerts on
   failed units, failed backups, backups with no success in 36 hours or
-  none at all, containers with a fixable critical or high vulnerability
+  none at all, a backup repository whose weekly check failed or is overdue,
+  containers with a fixable critical or high vulnerability
   for a day and images not scanned in 3 days (the `vulnerability-scan`
   module), full disks, hosts that are down,
   certificates that expire within 14 days and sites that are down or serve
@@ -244,8 +245,9 @@ System:
   touch, for every host; `homelab.forgejo.trustDeployCa` lets the same
   certificate reach Forgejo), `acme` (Cloudflare DNS-01), `backups` (restic to any
   rclone remote: Vaultwarden, plus the jobs in `homelab.backups.jobs`, with
-  consistent SQLite snapshots, and each job's last successful run as a
-  node exporter metric; restoring is in [docs/backups.md](docs/backups.md)),
+  consistent SQLite snapshots, each job's last successful run as a
+  node exporter metric, and a weekly `restic check` of the repository with
+  its result as one too; restoring is in [docs/backups.md](docs/backups.md)),
   `locale`, `yubikey` (pam_u2f with a
   host-independent origin, PIN and touch at login and screen lock, touch
   only for sudo; see [YubiKey](#yubikey)), `firewall` (role-based baseline, and

@@ -335,6 +335,50 @@ in
       });
     };
 
+    backups.check = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Check homelab.backups.resticRepo with restic check on a schedule,
+          as the restic-check unit and timer, reading a share of its data
+          (readDataSubset). The result goes to the node exporter's textfile
+          collector as homelab_backup_check_ok and the times of the last run
+          and the last success, which the example's "Backup repository
+          check failed" rule alerts on. The check takes the repository's
+          lock, so it and the jobs wait for each other. Off, its last
+          result is removed on the next rebuild.
+        '';
+      };
+
+      schedule = lib.mkOption {
+        type = lib.types.str;
+        default = "Sun *-*-* 04:00:00";
+        example = "Wed *-*-* 13:00:00";
+        description = ''
+          When the check runs, as a systemd OnCalendar value, started at a
+          random point in the hour after it. Missed runs are caught up after
+          boot (Persistent). Keep it apart from the jobs' schedules: they
+          wait for each other, and a check reading much data holds the lock
+          long. The example alert expects a success at least every 9 days.
+        '';
+      };
+
+      readDataSubset = lib.mkOption {
+        type = lib.types.str;
+        default = "5%";
+        example = "1/4";
+        description = ''
+          The share of the repository's data packs the check downloads and
+          verifies, as restic check --read-data-subset takes it: a
+          percentage, n/t for the nth of t parts, or a size such as 500M.
+          The packs are picked at random, so weekly 5% checks reach most of
+          the data within a year. The structure and every index are checked
+          on every run regardless.
+        '';
+      };
+    };
+
     vulnerabilityScan = {
       enable = lib.mkOption {
         type = lib.types.bool;

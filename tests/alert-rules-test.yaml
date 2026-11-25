@@ -98,3 +98,88 @@ tests:
               severity: critical
               instance: server1:9100
               job: node-exporter
+
+  # The backup repository check: server1 passes weekly and keeps up, so it
+  # never alerts. server2's check fails after a day and alerts at once;
+  # server4's has never passed and alerts too. server3's passed at time 0
+  # and then stopped running, so it alerts 9 days later.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_backup_check_ok{instance="server1:9100", job="node-exporter"}'
+        values: '1x13500'
+      - series: 'homelab_backup_check_last_success_timestamp_seconds{instance="server1:9100", job="node-exporter"}'
+        values: '0+60x13500'
+      - series: 'homelab_backup_check_ok{instance="server2:9100", job="node-exporter"}'
+        values: '1x1440 0x12060'
+      - series: 'homelab_backup_check_last_success_timestamp_seconds{instance="server2:9100", job="node-exporter"}'
+        values: '0x13500'
+      - series: 'homelab_backup_check_ok{instance="server3:9100", job="node-exporter"}'
+        values: '1x13500'
+      - series: 'homelab_backup_check_last_success_timestamp_seconds{instance="server3:9100", job="node-exporter"}'
+        values: '0x13500'
+      - series: 'homelab_backup_check_ok{instance="server4:9100", job="node-exporter"}'
+        values: '0x13500'
+    alert_rule_test:
+      - eval_time: 1d
+        alertname: homelab-backup-check-failed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              instance: server4:9100
+              job: node-exporter
+      - eval_time: 1d10m
+        alertname: homelab-backup-check-failed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              instance: server2:9100
+              job: node-exporter
+          - exp_labels:
+              severity: critical
+              instance: server4:9100
+              job: node-exporter
+      - eval_time: 9d4m
+        alertname: homelab-backup-check-failed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              instance: server2:9100
+              job: node-exporter
+          - exp_labels:
+              severity: critical
+              instance: server4:9100
+              job: node-exporter
+      - eval_time: 9d10m
+        alertname: homelab-backup-check-failed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              instance: server2:9100
+              job: node-exporter
+          - exp_labels:
+              severity: critical
+              instance: server3:9100
+              job: node-exporter
+          - exp_labels:
+              severity: critical
+              instance: server4:9100
+              job: node-exporter
+
+  # A failed restic-check unit alerts in the rule above, not as a failed
+  # unit; any other failed unit does.
+  - interval: 1m
+    input_series:
+      - series: 'node_systemd_unit_state{instance="host:9100", job="node-exporter", name="restic-check.service", state="failed"}'
+        values: '1x20'
+      - series: 'node_systemd_unit_state{instance="host:9100", job="node-exporter", name="example.service", state="failed"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: homelab-unit-failed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: host:9100
+              job: node-exporter
+              name: example.service
+              state: failed

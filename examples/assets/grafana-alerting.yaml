@@ -26,8 +26,9 @@ groups:
     folder: Homelab
     interval: 1m
     rules:
-      # Any systemd unit in the failed state. Backup units are left out here
-      # and alert as critical in their own rule below.
+      # Any systemd unit in the failed state. Backup units and the backup
+      # repository check are left out here and alert as critical in their
+      # own rules below.
       - uid: homelab-unit-failed
         title: Failed systemd unit
         condition: C
@@ -39,7 +40,7 @@ groups:
               refId: A
               instant: true
               expr: |-
-                node_systemd_unit_state{state="failed", name!~"restic-backups-.*"} == 1
+                node_systemd_unit_state{state="failed", name!~"restic-backups-.*|restic-check\\.service"} == 1
           - refId: C
             datasourceUid: __expr__
             model:
@@ -174,6 +175,50 @@ groups:
             Run it once and read its log:
             systemctl start restic-backups-{{ $labels.backup_job }};
             journalctl -u restic-backups-{{ $labels.backup_job }}
+
+      # The backup repository is damaged, or has not been checked in 9
+      # days. modules/backups.nix runs restic check weekly
+      # (homelab.backups.check) and writes homelab_backup_check_ok and
+      # homelab_backup_check_last_success_timestamp_seconds through the node
+      # exporter's textfile collector, on failure too. The jobs keep saving
+      # snapshots into a damaged repository, so this is the alert that
+      # finds it. A failed check is 1, an overdue one its age in seconds;
+      # 9 days fits the weekly schedule with a missed week's slack. A host
+      # whose check has never run has no series and does not alert.
+      - uid: homelab-backup-check-failed
+        title: Backup repository check failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                ((1 - homelab_backup_check_ok) == 1)
+                  or ((time() - homelab_backup_check_last_success_timestamp_seconds) > 777600)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup repository check on {{ $labels.instance }} failed or is overdue: run scripts/setup/restic-repair.sh on the host"
+          description: >-
+            Read what restic found with: journalctl -u restic-check.
+            A missing or damaged pack needs a repair of the repository,
+            which homelab-config's scripts/setup/restic-repair.sh runs;
+            docs/backups.md has the commands. Run the check again after it
+            with: systemctl start restic-check
 
       # A container whose image has a known CRITICAL or HIGH vulnerability
       # with a fixed version out: a bump of its image is worth doing soon.
