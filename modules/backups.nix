@@ -33,6 +33,17 @@
 #   homelab_backup_check_ok
 # into the same directory, on success and on failure.
 #
+# A sound repository does not prove a job's data comes back usable. So the
+# restic-restore-test unit (homelab.backups.restoreTest) restores the latest
+# snapshot of every job monthly into a scratch directory, with --verify, and
+# checks its SQLite databases with PRAGMA integrity_check and its git
+# repositories with git fsck. It writes, per job,
+#   homelab_backup_restore_test_ok{backup_job="<name>"}
+#   homelab_backup_restore_test_last_run_timestamp_seconds{...}
+#   homelab_backup_restore_test_last_success_timestamp_seconds{...}
+#   homelab_backup_restore_test_restored_bytes{...}
+# (docs/adr/0027-backups-are-restore-tested-monthly.md).
+#
 # Secrets are provisioned out of band at runtime (never committed) and shared
 # by all jobs:
 #   /var/lib/secrets/restic-password  the restic repository password
@@ -60,6 +71,27 @@ let
 
   checkScript = pkgs.callPackage ./backup-check-script.nix { };
   checkMetrics = "${textfileDir}/homelab_restic_check.prom";
+
+  restoreTestScript = pkgs.callPackage ./backup-restore-test-script.nix { };
+  restoreTestMetrics = "${textfileDir}/homelab_restore_test.prom";
+  restoreTestConfig = pkgs.writeText "restic-restore-test.json" (builtins.toJSON {
+    inherit textfileDir;
+    inherit (cfg.restoreTest) scratchDir;
+    stagingDir = "/var/backup";
+    gitFsckTimeoutSeconds = cfg.restoreTest.gitFsckTimeout;
+    # A job backs up daily by default; a latest snapshot over 2 days old
+    # means it has stopped.
+    maxAgeSeconds = 2 * 86400;
+    jobs = lib.mapAttrsToList (name: job: { inherit name; inherit (job) sqliteDatabases; }) jobs;
+  });
+
+  # Whether path a is b or lies under it.
+  within = a: b:
+    let
+      a' = lib.removeSuffix "/" a;
+      b' = lib.removeSuffix "/" b;
+    in
+    a' == b' || lib.hasPrefix "${b'}/" a';
 
   staging = name: "/var/backup/${name}";
 
@@ -189,6 +221,14 @@ in
         (lib.attrValues cfg.jobs);
       message = "homelab.backups.jobs.<name>.sqliteDatabases takes absolute paths without single quotes.";
     }
+    {
+      # The restore test empties <scratchDir>/<job> before and after it
+      # restores there, so it must never be live data.
+      assertion = !cfg.restoreTest.enable || (lib.hasPrefix "/" cfg.restoreTest.scratchDir
+        && lib.all (path: !(within cfg.restoreTest.scratchDir path) && !(within path cfg.restoreTest.scratchDir))
+          (lib.concatLists (lib.mapAttrsToList (name: job: job.paths ++ [ (staging name) ]) jobs)));
+      message = "homelab.backups.restoreTest.scratchDir must be an absolute path that neither holds nor lies in a backup job's paths or /var/backup/<job>.";
+    }
   ];
 
   environment.systemPackages = with pkgs; [
@@ -200,12 +240,13 @@ in
   # Staging dir for the consistent database copies taken before each run,
   # and the list of declared jobs for the textfile collector. The link
   # follows the jobs on every rebuild.
-  # With the check off, its last result is removed, so it does not alert
-  # as overdue.
+  # With the check or the restore test off, its last result is removed, so
+  # it does not alert as overdue.
   systemd.tmpfiles.rules = [
     "d /var/backup 0700 root root -"
     "L+ ${textfileDir}/homelab_backup_jobs.prom - - - - ${jobInfo}"
-  ] ++ lib.optional (!cfg.check.enable) "r ${checkMetrics}";
+  ] ++ lib.optional (!cfg.check.enable) "r ${checkMetrics}"
+  ++ lib.optional (!cfg.restoreTest.enable) "r ${restoreTestMetrics}";
 
   services.restic.backups = lib.mapAttrs mkJob jobs;
 
@@ -242,6 +283,36 @@ in
         };
       };
     })
+
+    # The monthly restore test of every job, with the same credentials and
+    # restic. restic restore takes a shared lock, so it waits only for a
+    # prune or a check; after the check when both start together, as at
+    # boot after a missed Sunday. The scratch directory defaults into the
+    # unit's private /var/tmp, which systemd removes when the unit stops,
+    # whatever the script got to.
+    (lib.mkIf cfg.restoreTest.enable {
+      restic-restore-test = {
+        description = "Restore every backup job's latest snapshot and check it";
+        wants = [ "network-online.target" ];
+        after = [ "network-online.target" "restic-check.service" ];
+        path = [ resticWaiting ];
+        environment = {
+          RESTIC_REPOSITORY = cfg.resticRepo;
+          RESTIC_PASSWORD_FILE = passwordFile;
+          RESTIC_CACHE_DIR = "/var/cache/restic-restore-test";
+        };
+        # A rebuild does not start a test, nor stop one that runs.
+        restartIfChanged = false;
+        serviceConfig = {
+          Type = "oneshot";
+          EnvironmentFile = environmentFile;
+          ExecStart = "${restoreTestScript}/bin/restic-restore-test ${restoreTestConfig}";
+          PrivateTmp = true;
+          CacheDirectory = "restic-restore-test";
+          CacheDirectoryMode = "0700";
+        };
+      };
+    })
   ];
 
   # Spread over an hour; Persistent runs a check missed while the host was
@@ -250,6 +321,16 @@ in
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = cfg.check.schedule;
+      Persistent = true;
+      RandomizedDelaySec = "1h";
+    };
+  };
+
+  # Monthly, spread over an hour, caught up at the next boot.
+  systemd.timers.restic-restore-test = lib.mkIf cfg.restoreTest.enable {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = cfg.restoreTest.schedule;
       Persistent = true;
       RandomizedDelaySec = "1h";
     };

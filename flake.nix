@@ -215,6 +215,15 @@
             modules = [{ homelab.backups.check.enable = false; }];
           }).config;
         };
+        # The restic-restore-test script against a local restic repository
+        # with a SQLite job and a git job, sound and damaged, and the example
+        # server's unit, config and timer for it, and with the test off.
+        backup-restore-test = pkgs.callPackage ./tests/backup-restore-test.nix {
+          config = exampleServer.config;
+          off = (exampleServer.extendModules {
+            modules = [{ homelab.backups.restoreTest.enable = false; }];
+          }).config;
+        };
         # The example's alert rules in promtool: every query parses, and the
         # vulnerability and Tailscale rules alert on what they should.
         alert-rules = pkgs.callPackage ./tests/alert-rules.nix { };
