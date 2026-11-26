@@ -326,3 +326,81 @@ tests:
       - eval_time: 8d
         alertname: homelab-proxmox-metrics-stale
         exp_alerts: []
+  # OPNsense: router1's node_exporter is unreachable and alerts after 10
+  # minutes; router2 answers but its API refuses the exporter, and alerts
+  # too. router3 is fine on both, and router4 was down for 5 minutes only.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="router1", job="opnsense"}'
+        values: '0x30'
+      - series: 'up{instance="router2", job="opnsense"}'
+        values: '1x30'
+      - series: 'opnsense_up{instance="router2", job="opnsense-exporter", opnsense_instance="router2"}'
+        values: '0x30'
+      - series: 'up{instance="router3", job="opnsense"}'
+        values: '1x30'
+      - series: 'opnsense_up{instance="router3", job="opnsense-exporter", opnsense_instance="router3"}'
+        values: '1x30'
+      - series: 'up{instance="router4", job="opnsense"}'
+        values: '0x5 1x25'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: homelab-opnsense-unreachable
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: homelab-opnsense-unreachable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              instance: router1
+          - exp_labels:
+              severity: critical
+              instance: router2
+
+  # UniFi: unpoller1 polls every minute and never alerts. unpoller2 has
+  # never polled successfully (-1), and unpoller3 cannot be scraped; both
+  # alert after 10 minutes. unpoller4's last poll ages from time 0, is
+  # over 5 minutes old at 6 minutes, and alerts 10 minutes later.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="unpoller1", job="unifi"}'
+        values: '1x30'
+      - series: 'unpoller_prometheus_cache_age_seconds{instance="unpoller1", job="unifi"}'
+        values: '30x30'
+      - series: 'up{instance="unpoller2", job="unifi"}'
+        values: '1x30'
+      - series: 'unpoller_prometheus_cache_age_seconds{instance="unpoller2", job="unifi"}'
+        values: '-1x30'
+      - series: 'up{instance="unpoller3", job="unifi"}'
+        values: '0x30'
+      - series: 'up{instance="unpoller4", job="unifi"}'
+        values: '1x30'
+      - series: 'unpoller_prometheus_cache_age_seconds{instance="unpoller4", job="unifi"}'
+        values: '0+60x30'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: homelab-unifi-unreachable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: unpoller2
+              job: unifi
+          - exp_labels:
+              severity: warning
+              instance: unpoller3
+              job: unifi
+      - eval_time: 17m
+        alertname: homelab-unifi-unreachable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: unpoller2
+              job: unifi
+          - exp_labels:
+              severity: warning
+              instance: unpoller3
+              job: unifi
+          - exp_labels:
+              severity: warning
+              instance: unpoller4
+              job: unifi

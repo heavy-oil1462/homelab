@@ -29,6 +29,14 @@ storage:
   tsdb:
     out_of_order_time_window: 10m
 
+# Jobs the observability module writes from homelab.observability.scrape:
+# OPNsense (jobs opnsense and opnsense-exporter) and UniFi (job unifi),
+# through exporters on the observability host. The file has no jobs while
+# nothing is enabled. Don't name a job below like one of those; Prometheus
+# refuses a config with two jobs of one name.
+scrape_config_files:
+  - /etc/prometheus/scrape-configs.yml
+
 scrape_configs:
   - job_name: prometheus
     static_configs:

@@ -246,6 +246,28 @@
             };
             prometheusConfig = ./examples/assets/prometheus.yml;
           };
+        # The scrapers of network gear: the example server's jobs, exporter
+        # containers, secrets and their check, with nothing enabled, and the
+        # configurations the host refuses (ADR-0029).
+        network-scrape =
+          let
+            with' = module: (exampleServer.extendModules { modules = [ module ]; }).config;
+          in
+          pkgs.callPackage ./tests/network-scrape.nix {
+            config = exampleServer.config;
+            off = with' {
+              homelab.observability.scrape.opnsense.enable = nixpkgs.lib.mkForce false;
+              homelab.observability.scrape.unifi.enable = nixpkgs.lib.mkForce false;
+            };
+            broken = {
+              noScrapeConfigFiles = with' {
+                homelab.observability.prometheusConfig = nixpkgs.lib.mkForce
+                  (pkgs.writeText "prometheus.yml" "scrape_configs: []\n");
+              };
+              opnsenseInsecureWithCa = with' { homelab.observability.scrape.opnsense.insecure = true; };
+              unifiInsecureWithCert = with' { homelab.observability.scrape.unifi.insecure = true; };
+            };
+          };
         # The example's alert rules in promtool: every query parses, and the
         # vulnerability and Tailscale rules alert on what they should.
         alert-rules = pkgs.callPackage ./tests/alert-rules.nix { };

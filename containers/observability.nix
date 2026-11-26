@@ -181,7 +181,11 @@ let
   otlpFrom6 = lib.filter (lib.hasInfix ":") otlp.allowedSources;
 in
 {
-  imports = [ ../modules/options.nix ];
+  imports = [
+    ../modules/options.nix
+    # Network gear, through exporters on this host.
+    ./observability-scrape.nix
+  ];
 
   assertions = [
     {

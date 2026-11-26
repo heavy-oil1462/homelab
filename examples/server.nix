@@ -170,6 +170,23 @@
         enable = true;
         allowedSources = [ "192.0.2.30" ];
       };
+      # The router and the UniFi controller, through exporters on this host
+      # (docs/opnsense.md, docs/unifi.md). Their credentials are
+      # /var/lib/secrets/opnsense-exporter.env and
+      # /var/lib/secrets/unpoller.env.
+      scrape.opnsense = {
+        enable = true;
+        name = "router";
+        address = "192.0.2.1";
+        # OPNsense's self-signed certificate, which names 192.0.2.1.
+        caFile = "/var/lib/secrets/opnsense-ca.pem";
+      };
+      scrape.unifi = {
+        enable = true;
+        url = "https://192.0.2.2:11443";
+        # UniFi OS's self-signed certificate, pinned.
+        certFile = "/var/lib/secrets/unifi-cert.pem";
+      };
       grafanaOidc = {
         enable = true;
         # The emails of the admins' Pocket ID accounts.

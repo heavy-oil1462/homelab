@@ -97,9 +97,19 @@ Services (OCI containers, pinned by digest):
   module), full disks, hosts that are down,
   certificates that expire within 14 days, sites that are down or serve
   an invalid certificate, Tailscale keys about to expire, Tailscale down,
-  Tailnet Lock turned off and nodes it does not trust, Proxmox nodes
-  whose metrics stopped, through one
-  placeholder contact point. The
+  Tailnet Lock turned off and nodes it does not trust, an OPNsense router
+  or UniFi controller that cannot be reached, Proxmox nodes whose metrics
+  stopped, through one
+  placeholder contact point.
+  `homelab.observability.scrape.opnsense` and `.unifi` scrape network
+  gear through exporters on the observability host: the router's
+  os-node_exporter plugin and the opnsense-exporter, and unpoller for
+  the controller, each as an unprivileged container with its
+  credentials from an environment file under `/var/lib/secrets/`. Their
+  jobs are in `/etc/prometheus/scrape-configs.yml`, which prometheus.yml
+  lists under `scrape_config_files`, as the example does. See
+  [docs/opnsense.md](docs/opnsense.md) and [docs/unifi.md](docs/unifi.md)
+  (docs/adr/0029-network-gear-scraped-through-exporters.md). The
   example dashboard `gpu.json` shows GPU load per instance from the NVIDIA
   GPU exporters listed in `homelab.observability.nvidiaGpuTargets`, which
   Prometheus reads from `/etc/prometheus/nvidia-gpu-targets.json` through
@@ -500,6 +510,8 @@ starting a container or makes it create a directory in the file's place.
 | `unifi.env` | `unifi` | root, 0400 | `unifi-db` refuses to start (MongoDB would run without auth), so `unifi` does not start |
 | `homeassistant-secrets.yaml` | `homeassistant` | root, 0400 | Home Assistant starts; config that uses `!secret` does not load |
 | `ha-prometheus-token` | `observability` | prometheus, 0640 | Prometheus runs; the home-assistant scrape fails with 401 |
+| `opnsense-exporter.env` | `observability`, with `scrape.opnsense` | root, 0400 | the opnsense-exporter unit fails, naming the missing variables; Prometheus and the rest run |
+| `unpoller.env` | `observability`, with `scrape.unifi` | root, 0400 | the unpoller unit fails, naming the missing variables; Prometheus and the rest run |
 | `registry.htpasswd` | `registry` | registry, 0400 | the registry refuses to start, naming the file |
 | `forgejo-secret-key` | `forgejo` | forgejo, 0400 | Forgejo refuses to start |
 | `grafana-oidc-client-id`, `grafana-oidc-client-secret` | `observability`, with `grafanaOidc` | grafana, 0400 | written by Pocket ID for a client in `homelab.pocketId.clients`; otherwise Grafana runs and no one can sign in |
@@ -533,6 +545,7 @@ nothing but root (docs/adr/0014-containers-run-unprivileged.md):
 | `caddy` (`reverse-proxy`) | caddy, 606 | NET_BIND_SERVICE, for 443 |
 | `homepage` | homepage, 607 | none |
 | `prometheus`, `loki`, `grafana` (`observability`) | prometheus 603, loki 604, grafana 605 | none |
+| `opnsense-exporter`, `unpoller` (`observability`, with `scrape`) | opnsense-exporter 608, unpoller 609 | none |
 | `vaultwarden` | vaultwarden, 600 | none |
 | `registry` | registry, 601 | none |
 | `forgejo` | forgejo, 602 | none |
@@ -601,6 +614,8 @@ the block 600 to 699, which automatic assignment does not reach in practice:
 - 605: grafana
 - 606: caddy
 - 607: homepage
+- 608: opnsense-exporter
+- 609: unpoller
 
 A host that already has one of these users from before keeps its ids: NixOS
 warns and does not change them. Forgejo, Vaultwarden, the observability

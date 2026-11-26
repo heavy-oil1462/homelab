@@ -92,5 +92,7 @@ never reaches the workers.
   restore-tested monthly, automatically (Accepted)
 - [ADR-0028](0028-tailnet-lock-decides-which-nodes-join.md): Tailnet Lock
   decides which nodes join (Accepted)
+- [ADR-0029](0029-network-gear-scraped-through-exporters.md): Network
+  gear is scraped through exporters on the observability host (Accepted)
 - [ADR-0030](0030-proxmox-pushes-opentelemetry-into-prometheus.md):
   Proxmox pushes OpenTelemetry into Prometheus (Accepted)
