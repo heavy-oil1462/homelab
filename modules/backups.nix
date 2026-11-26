@@ -156,7 +156,7 @@ let
       || true)
     case "$size" in *[!0-9]* | "") size= ;; esac
     {
-      echo '# HELP homelab_backup_last_success_timestamp_seconds When the backup job last succeeded.'
+      echo '# HELP homelab_backup_last_success_timestamp_seconds When the backup job last succeeded: its backup and its own forget, not the nightly prune.'
       echo '# TYPE homelab_backup_last_success_timestamp_seconds gauge'
       echo ${lib.escapeShellArg ''homelab_backup_last_success_timestamp_seconds{backup_job="${label name}"}''} "$now"
       if [ -n "$size" ]; then

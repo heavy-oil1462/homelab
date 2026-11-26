@@ -27,8 +27,8 @@ groups:
     interval: 1m
     rules:
       # Any systemd unit in the failed state. Backup units, the backup
-      # repository check and the restore test are left out here and alert
-      # as critical in their own rules below.
+      # repository check, its prune and the restore test are left out here
+      # and alert as critical in their own rules below.
       - uid: homelab-unit-failed
         title: Failed systemd unit
         condition: C
@@ -40,7 +40,7 @@ groups:
               refId: A
               instant: true
               expr: |-
-                node_systemd_unit_state{state="failed", name!~"restic-backups-.*|restic-check\\.service|restic-restore-test\\.service"} == 1
+                node_systemd_unit_state{state="failed", name!~"restic-backups-.*|restic-check\\.service|restic-prune\\.service|restic-restore-test\\.service"} == 1
           - refId: C
             datasourceUid: __expr__
             model:
@@ -219,6 +219,52 @@ groups:
             which homelab-config's scripts/setup/restic-repair.sh runs;
             docs/backups.md has the commands. Run the check again after it
             with: systemctl start restic-check
+
+      # The nightly prune of the backup repository failed, or has not
+      # succeeded in 2 days. The jobs only forget their own snapshots;
+      # modules/backups.nix prunes the shared repository once a night as
+      # the restic-prune unit and writes homelab_backup_prune_ok and
+      # homelab_backup_prune_last_success_timestamp_seconds through the node
+      # exporter's textfile collector, on failure too
+      # (docs/adr/0031-one-prune-a-night-for-the-shared-repository.md).
+      # Without prunes the repository only grows, and a prune is the first
+      # to read a damaged pack. A failed prune is 1, a stale one its age in
+      # seconds; 2 days fits the nightly schedule with a missed night's
+      # slack. A host whose prune has never run has no series and does not
+      # alert.
+      - uid: homelab-backup-prune-failed
+        title: Backup prune failed or stale
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                ((1 - homelab_backup_prune_ok) == 1)
+                  or ((time() - homelab_backup_prune_last_success_timestamp_seconds) > 172800)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup prune on {{ $labels.instance }} failed or is stale: journalctl -u restic-prune"
+          description: >-
+            Read what restic said with: journalctl -u restic-prune. Packs
+            missing from the repository need a repair first, as for a
+            failed repository check (docs/backups.md, "Prune"). Prune again
+            after it with: systemctl start restic-prune
 
       # A backup job whose data did not come back whole and usable, or has
       # not in 40 days. modules/backups.nix restores every job's latest

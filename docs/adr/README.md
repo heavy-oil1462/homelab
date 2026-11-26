@@ -96,3 +96,5 @@ never reaches the workers.
   gear is scraped through exporters on the observability host (Accepted)
 - [ADR-0030](0030-proxmox-pushes-opentelemetry-into-prometheus.md):
   Proxmox pushes OpenTelemetry into Prometheus (Accepted)
+- [ADR-0031](0031-one-prune-a-night-for-the-shared-repository.md): One
+  prune a night for the shared repository (Accepted)
