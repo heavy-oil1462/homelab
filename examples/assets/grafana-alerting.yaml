@@ -637,6 +637,82 @@ groups:
             probe_failed_due_to_regex, or on the observability host with
             curl -v {{ $labels.instance }}
 
+      # The router, from homelab.observability.scrape.opnsense
+      # (docs/opnsense.md): Prometheus cannot scrape its node_exporter
+      # (job opnsense), or the opnsense-exporter cannot read its API
+      # (opnsense_up). Both carry the router's name as instance. An
+      # exporter that is not running leaves only the first; its unit
+      # alerts as a failed unit.
+      - uid: homelab-opnsense-unreachable
+        title: OPNsense unreachable
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                min by (instance) (up{job="opnsense"} or opnsense_up{job="opnsense-exporter"})
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OPNsense {{ $labels.instance }} is unreachable, or its API refuses the exporter"
+          description: >-
+            Check up{job="opnsense"} and opnsense_up in Prometheus. If the
+            router answers but opnsense_up is 0, the API refused the key:
+            journalctl -u podman-opnsense-exporter on the observability
+            host says why (docs/opnsense.md).
+
+      # The UniFi controller, from homelab.observability.scrape.unifi
+      # (docs/unifi.md): unpoller polls it every minute and keeps serving
+      # the last good poll, so a controller it cannot reach shows as the
+      # age of that poll, over 5 minutes, or -1 when none has succeeded.
+      # "or up" covers an unpoller Prometheus cannot scrape.
+      - uid: homelab-unifi-unreachable
+        title: UniFi controller unreachable
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                (unpoller_prometheus_cache_age_seconds{job="unifi"} >= 0 < 300) * 0 + 1 or up{job="unifi"} * 0
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "unpoller has not polled the UniFi controller {{ $labels.instance }} for 15 minutes"
+          description: >-
+            journalctl -u podman-unpoller on the observability host says
+            why: the controller down, its certificate not the pinned one,
+            or the user's password refused (docs/unifi.md).
+
 # One contact point for everything. Replace the URL with your own receiver;
 # the placeholder posts Grafana's webhook JSON to an ntfy topic, which ntfy
 # turns into a readable message with its built-in "grafana" template.
