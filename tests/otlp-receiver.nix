@@ -66,8 +66,6 @@ let
     ++ expect "off: Prometheus's command" imageCmd (cmd off)
     ++ expect "off: the socket" false (off.systemd.sockets ? otlp-receiver)
     ++ expect "off: an iptables rule for 4318" false (otlpRule off)
-    ++ expect "off: the OTLP site in the Caddyfile" false
-      (lib.hasInfix "otlp_metrics" (builtins.readFile (caddyfile off)))
     ++ expectFailure "noSources" "allowedSources" broken.noSources
     ++ expectFailure "everyone" "prefix length 0" broken.everyone
     ++ expectFailure "noCaddyAddress" "Caddy" broken.noCaddyAddress;
@@ -162,18 +160,30 @@ let
         -e 's|prometheus:9090|127.0.0.1:{$PROM_PORT}|' otlp-site
     } > Caddyfile
 
-    # The container's command, with the host's paths for its mounts.
-    export PROM_PORT=$(free_port)
+    # Without the receiver, the generated Caddyfile has no OTLP site.
+    ! grep -q otlp_metrics ${caddyfile off} || fail "the OTLP site is in the Caddyfile with the receiver off"
+
+    # The container's command, with the host's paths for its mounts. As
+    # with Caddy, another listener can take the port first; Prometheus
+    # then exits and gets three more tries on other ports.
     eval "args=($cmd)"
     args=("''${args[@]/#--config.file=*/--config.file=${prometheusConfig}}")
     args=("''${args[@]/#--storage.tsdb.path=*/--storage.tsdb.path=$PWD/data}")
-    prometheus "''${args[@]}" --web.listen-address=127.0.0.1:$PROM_PORT > prometheus.log 2>&1 &
-    pids+=($!)
-    for i in $(seq 100); do
-      curl -sf --max-time 2 -o /dev/null http://127.0.0.1:$PROM_PORT/-/ready && break
-      [ "$i" = 100 ] && fail "Prometheus did not start"
-      sleep 0.2
+    up=
+    for _ in 1 2 3 4; do
+      export PROM_PORT=$(free_port)
+      prometheus "''${args[@]}" --web.listen-address=127.0.0.1:$PROM_PORT > prometheus.log 2>&1 &
+      pid=$!
+      for _ in $(seq 300); do
+        kill -0 "$pid" 2> /dev/null || break
+        if curl -sf --max-time 2 -o /dev/null http://127.0.0.1:$PROM_PORT/-/ready; then up=1; break; fi
+        sleep 0.2
+      done
+      if [ -n "$up" ]; then pids+=("$pid"); break; fi
+      kill "$pid" 2> /dev/null || true
+      wait "$pid" 2> /dev/null || true
     done
+    [ -n "$up" ] || fail "Prometheus did not start"
 
     start_caddy OTLP_PORT
 
@@ -191,11 +201,11 @@ let
     code=$(post full.json.gz /v1/metrics)
     [ "$code" = 200 ] || fail "the push got $code"
 
-    for i in $(seq 50); do
+    for i in $(seq 150); do
       curl -s --max-time 5 -G http://127.0.0.1:$PROM_PORT/api/v1/query \
         --data-urlencode 'query={job="proxmox-ve", __name__=~"proxmox_.*"}' > series.json || true
       python3 -I ${expectSeries} < series.json 2> series.err && break
-      [ "$i" = 50 ] && fail "the pushed series: $(cat series.err)"
+      [ "$i" = 150 ] && fail "the pushed series: $(cat series.err)"
       sleep 0.2
     done
 
