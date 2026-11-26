@@ -811,6 +811,178 @@ in
           nvidia-gpu job in prometheus.yml points at it.
         '';
       };
+      # Network gear Prometheus scrapes through exporters on this host
+      # (docs/adr/0029-network-gear-scraped-through-exporters.md). Their
+      # jobs are in /etc/prometheus/scrape-configs.yml, which prometheus.yml
+      # lists under scrape_config_files.
+      scrape = {
+        opnsense = {
+          enable = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = ''
+              Scrape an OPNsense router: its os-node_exporter plugin, as the
+              job opnsense, and its API through the opnsense-exporter
+              (github.com/AthennaMind/opnsense-exporter), which runs as the
+              container opnsense-exporter on this host, as the job
+              opnsense-exporter. The exporter's API key and secret come from
+              secretFile (docs/opnsense.md).
+            '';
+          };
+          name = lib.mkOption {
+            type = lib.types.strMatching "[A-Za-z0-9._-]+";
+            default = "opnsense";
+            example = "router";
+            description = ''
+              The router's name: the instance label of both jobs and the
+              exporter's opnsense_instance label, which the OPNsense
+              dashboard (Grafana 24738) matches with one variable.
+            '';
+          };
+          address = lib.mkOption {
+            type = lib.types.strMatching "[A-Za-z0-9._-]+|[[][0-9A-Fa-f:]+[]]";
+            example = "192.0.2.1";
+            description = ''
+              Host name or address of the router, as the observability host
+              reaches it, without scheme or port; an IPv6 address in
+              brackets. The certificate of the API must name it unless
+              insecure is set.
+            '';
+          };
+          api = {
+            scheme = lib.mkOption {
+              type = lib.types.enum [ "https" "http" ];
+              default = "https";
+              description = "Scheme of OPNsense's API, the web GUI's.";
+            };
+            port = lib.mkOption {
+              type = lib.types.nullOr lib.types.port;
+              default = null;
+              example = 8443;
+              description = "Port of the API, the web GUI's; null for the scheme's own.";
+            };
+          };
+          caFile = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            example = "/var/lib/secrets/opnsense-ca.pem";
+            description = ''
+              PEM file of the CA that signed the web GUI's certificate, on
+              the host, readable by the opnsense-exporter user. The exporter
+              trusts only it; the certificate must still name address. Null
+              trusts the image's public CAs, which suits a certificate from
+              a public CA such as Let's Encrypt.
+            '';
+          };
+          insecure = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = ''
+              Do not verify the API's certificate. Warning: anyone who can
+              intercept the connection between this host and the router
+              gets the API key and secret, and with them what the key may
+              read. Prefer caFile, with OPNsense's own CA, for a
+              self-signed certificate.
+            '';
+          };
+          secretFile = lib.mkOption {
+            type = lib.types.str;
+            default = "/var/lib/secrets/opnsense-exporter.env";
+            description = ''
+              Environment file with OPNSENSE_EXPORTER_OPS_API_KEY and
+              OPNSENSE_EXPORTER_OPS_API_SECRET, the key and secret of a
+              read-only OPNsense user. Owned by root, mode 0400. While it
+              is empty or lacks either, the exporter does not start and
+              its unit fails, saying so; the rest of the stack runs.
+            '';
+          };
+          nodeExporter = {
+            enable = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = ''
+                Scrape the router's os-node_exporter plugin, whose metrics
+                the dashboard's system panels use. It must listen on an
+                interface the observability host reaches.
+              '';
+            };
+            port = lib.mkOption {
+              type = lib.types.port;
+              default = 9100;
+              description = "Port of the router's node_exporter.";
+            };
+          };
+        };
+        unifi = {
+          enable = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = ''
+              Scrape a UniFi Network controller through unpoller
+              (github.com/unpoller/unpoller), which runs as the container
+              unpoller on this host, with its Prometheus output, as the job
+              unifi. It signs in with a read-only local user from
+              secretFile (docs/unifi.md).
+            '';
+          };
+          name = lib.mkOption {
+            type = lib.types.strMatching "[A-Za-z0-9._-]+";
+            default = "unifi";
+            description = "The instance label of the unifi job.";
+          };
+          url = lib.mkOption {
+            type = lib.types.strMatching "https?://[^/]+";
+            example = "https://192.0.2.2:11443";
+            description = ''
+              URL of the controller, as the observability host reaches it,
+              with no path: for UniFi OS (a console or UniFi OS Server) its
+              web address, for a classic controller the port of its web UI,
+              usually 8443.
+            '';
+          };
+          sites = lib.mkOption {
+            type = lib.types.nonEmptyListOf lib.types.str;
+            default = [ "all" ];
+            example = [ "default" ];
+            description = ''
+              Sites to poll, by their short names; [ "all" ] polls every
+              site the user can see.
+            '';
+          };
+          certFile = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            example = "/var/lib/secrets/unifi-cert.pem";
+            description = ''
+              PEM file, readable by the unpoller user, of a certificate the
+              controller's chain must contain: its own self-signed
+              certificate, or the CA that signed it. unpoller pins it and
+              checks no names, so it suits the self-signed certificate
+              UniFi OS makes. Null verifies against the image's public CAs.
+            '';
+          };
+          insecure = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = ''
+              Do not verify the controller's certificate. Warning: anyone
+              who can intercept the connection between this host and the
+              controller gets the user's password. Prefer certFile.
+            '';
+          };
+          secretFile = lib.mkOption {
+            type = lib.types.str;
+            default = "/var/lib/secrets/unpoller.env";
+            description = ''
+              Environment file with UP_UNIFI_DEFAULT_USER and
+              UP_UNIFI_DEFAULT_PASS, a read-only local user of the
+              controller. Owned by root, mode 0400. While it is empty or
+              lacks either, unpoller does not start and its unit fails,
+              saying so; the rest of the stack runs.
+            '';
+          };
+        };
+      };
       grafanaProxyAuth = {
         enable = lib.mkOption {
           type = lib.types.bool;
