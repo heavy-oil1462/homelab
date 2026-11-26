@@ -224,6 +224,28 @@
             modules = [{ homelab.backups.restoreTest.enable = false; }];
           }).config;
         };
+        # Proxmox's OTLP pushes: the example server's receiver as evaluated,
+        # on iptables and nftables, off, and the configurations it refuses;
+        # then a Proxmox-shaped push through its Caddy site into the real
+        # Prometheus, and every other path refused.
+        otlp-receiver =
+          let
+            with' = host: module: (host.extendModules { modules = [ module ]; }).config;
+          in
+          pkgs.callPackage ./tests/otlp-receiver.nix {
+            on = exampleServer.config;
+            nftables = with' exampleServer { networking.nftables.enable = true; };
+            off = with' exampleServer { homelab.observability.otlpReceiver.enable = nixpkgs.lib.mkForce false; };
+            broken = {
+              noSources = with' exampleServer { homelab.observability.otlpReceiver.allowedSources = nixpkgs.lib.mkForce [ ]; };
+              everyone = with' exampleServer { homelab.observability.otlpReceiver.allowedSources = [ "0.0.0.0/0" ]; };
+              noCaddyAddress = with' exampleServer {
+                homelab.reverseProxy.address = nixpkgs.lib.mkForce null;
+                homelab.homeassistant.trustedProxies = nixpkgs.lib.mkForce null;
+              };
+            };
+            prometheusConfig = ./examples/assets/prometheus.yml;
+          };
         # The example's alert rules in promtool: every query parses, and the
         # vulnerability and Tailscale rules alert on what they should.
         alert-rules = pkgs.callPackage ./tests/alert-rules.nix { };

@@ -637,6 +637,46 @@ groups:
             probe_failed_due_to_regex, or on the observability host with
             curl -v {{ $labels.instance }}
 
+      # A Proxmox VE node that pushed its metrics over OTLP
+      # (homelab.observability.otlpReceiver, docs/proxmox.md) within the
+      # last 7 days, but nothing in the last 15 minutes: the node is down,
+      # its metric server is off or failing, or the push no longer gets
+      # through. Pushed series have no up to watch, so the rule compares
+      # the two windows; a node never seen, or silent for over 7 days, has
+      # no series and does not alert.
+      - uid: homelab-proxmox-metrics-stale
+        title: Proxmox metrics stale
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                count_over_time(proxmox_node_uptime_seconds{job="proxmox-ve"}[7d])
+                  unless count_over_time(proxmox_node_uptime_seconds{job="proxmox-ve"}[15m])
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Proxmox node {{ $labels.node }} has sent no metrics for 15 minutes"
+          description: >-
+            Check the node is up, and its metric server under Datacenter,
+            Metric Server; on the observability host, see that the
+            otlp-receiver socket and Caddy run: journalctl -u otlp-receiver
+
 # One contact point for everything. Replace the URL with your own receiver;
 # the placeholder posts Grafana's webhook JSON to an ntfy topic, which ntfy
 # turns into a readable message with its built-in "grafana" template.

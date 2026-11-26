@@ -6,6 +6,29 @@
 global:
   scrape_interval: 30s
 
+# OTLP pushes, with homelab.observability.otlpReceiver.enable: Proxmox VE's
+# OpenTelemetry metric server sends its metrics here (docs/proxmox.md).
+# UnderscoreEscapingWithSuffixes, Prometheus 3's default, stated here, gives
+# classic names: dots become underscores and the unit and _total are
+# appended, so proxmox_vm_netin_total in bytes is
+# proxmox_vm_netin_bytes_total, the names Grafana dashboard 23855 queries.
+# service.name becomes the job label (proxmox-ve). The other resource
+# attributes go to target_info only, unless promoted to labels on every
+# series: Proxmox's cluster and node names are, as proxmox_cluster and
+# proxmox_node. Its data points carry node, vmid, name, type, device and
+# storage themselves.
+otlp:
+  translation_strategy: UnderscoreEscapingWithSuffixes
+  promote_resource_attributes:
+    - proxmox.cluster
+    - proxmox.node
+
+# A push that arrives late, after a newer one, is kept rather than refused
+# as out of order. Scrapes are unaffected.
+storage:
+  tsdb:
+    out_of_order_time_window: 10m
+
 scrape_configs:
   - job_name: prometheus
     static_configs:
