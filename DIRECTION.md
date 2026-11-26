@@ -41,6 +41,12 @@ work in its repository.
 - Break-glass access: when Tailscale is down, the servers take SSH on port
   22 from the LAN admin subnet, keys only (owner, question 01a2001c-d9ed,
   2026-11-21; ADR-0024). SSH access stays an Ask-the-owner-first change.
+- Tailscale for now. The owner may move to an open-source control plane
+  later ("Q for now. Then eventually I may move away from tailscale to
+  something open source but that is for later", owner, 2026-11-26), so
+  keep what depends on Tailscale's own features inside the Tailscale
+  modules (`modules/tailscale*.nix` and the sign-in pieces), not spread
+  across the library. This is direction only; no work toward the move now.
 - Security is proportionate and even: each layer is sized to the threats
   realistic for a single-owner homelab, namely laptop theft, burglary, a
   compromised LAN or IoT device, phishing and malware on a workstation. No
