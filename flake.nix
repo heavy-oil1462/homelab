@@ -285,12 +285,18 @@
           let
             with' = host: module: (host.extendModules { modules = [ module ]; }).config;
             sshFrom = { homelab.network.sshFrom = [ "192.0.2.0/24" "2001:db8::/64" ]; };
-            onHost = exampleServer.extendModules { modules = [ sshFrom ]; };
+            # The example server without the OTLP receiver's firewall rule,
+            # so the rules compared are SSH's alone; otlp-receiver checks
+            # its own.
+            server = exampleServer.extendModules {
+              modules = [{ homelab.observability.otlpReceiver.enable = nixpkgs.lib.mkForce false; }];
+            };
+            onHost = server.extendModules { modules = [ sshFrom ]; };
           in
           pkgs.callPackage ./tests/break-glass-ssh.nix {
             on = onHost.config;
             nftables = with' onHost { networking.nftables.enable = true; };
-            off = exampleServer.config;
+            off = server.config;
             broken = {
               passwordAuth = with' onHost {
                 services.openssh.settings.PasswordAuthentication = nixpkgs.lib.mkForce true;
@@ -304,8 +310,8 @@
               loopbackOnly = with' onHost {
                 services.openssh.listenAddresses = nixpkgs.lib.mkForce [{ addr = "127.0.0.1"; port = 22; }];
               };
-              everyone = with' exampleServer { homelab.network.sshFrom = [ "192.0.2.0/24" "0.0.0.0/0" ]; };
-              everyone6 = with' exampleServer { homelab.network.sshFrom = [ "::/0" ]; };
+              everyone = with' server { homelab.network.sshFrom = [ "192.0.2.0/24" "0.0.0.0/0" ]; };
+              everyone6 = with' server { homelab.network.sshFrom = [ "::/0" ]; };
             };
           };
         # Servers take SSH through sshd only: the example server has no
