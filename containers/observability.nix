@@ -172,7 +172,11 @@ let
     else { user = "X-Grafana-Git-Sync-User"; role = "X-Grafana-Git-Sync-Role"; };
 in
 {
-  imports = [ ../modules/options.nix ];
+  imports = [
+    ../modules/options.nix
+    # Network gear, through exporters on this host.
+    ./observability-scrape.nix
+  ];
 
   assertions = [
     {
