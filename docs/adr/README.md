@@ -90,3 +90,5 @@ never reaches the workers.
   through sshd only, not Tailscale SSH (Accepted)
 - [ADR-0027](0027-backups-are-restore-tested-monthly.md): Backups are
   restore-tested monthly, automatically (Accepted)
+- [ADR-0028](0028-tailnet-lock-decides-which-nodes-join.md): Tailnet Lock
+  decides which nodes join (Accepted)

@@ -95,8 +95,10 @@ Services (OCI containers, pinned by digest):
   containers with a fixable critical or high vulnerability
   for a day and images not scanned in 3 days (the `vulnerability-scan`
   module), full disks, hosts that are down,
-  certificates that expire within 14 days and sites that are down or serve
-  an invalid certificate, through one placeholder contact point. The
+  certificates that expire within 14 days, sites that are down or serve
+  an invalid certificate, Tailscale keys about to expire, Tailscale down,
+  Tailnet Lock turned off and nodes it does not trust, through one
+  placeholder contact point. The
   example dashboard `gpu.json` shows GPU load per instance from the NVIDIA
   GPU exporters listed in `homelab.observability.nvidiaGpuTargets`, which
   Prometheus reads from `/etc/prometheus/nvidia-gpu-targets.json` through
@@ -368,7 +370,8 @@ host off until someone logs it in again at its console, or through the same
 sshd from the LAN where `homelab.network.sshFrom` allows it
 ([SSH access](#ssh-access)). On every host
 with the `tailscale` and `observability-agent` modules, the
-`tailscale-metrics` unit reads `tailscale status --json` every 5 minutes,
+`tailscale-metrics` unit reads `tailscale status --json` and
+`tailscale lock status --json` every 5 minutes,
 and at boot once tailscaled has had 2 minutes, and writes for the node
 exporter's textfile collector:
 
@@ -379,10 +382,21 @@ exporter's textfile collector:
   the node, else 0.
 - `homelab_tailscale_online`: 1 when the node is logged in and connected
   to the control plane, else 0.
+- `homelab_tailscale_lock_enabled`: 1 when Tailnet Lock is on, 0 when it
+  is off; written only once the host has seen it on, so a tailnet that
+  has not set it up has no series.
+- `homelab_tailscale_lock_node_signed`: 1 when the lock trusts the node's
+  key, 0 when the node is locked out; written only while the lock is on.
+
+Both lock series come from `tailscale lock status --json`. A tailscale
+without the command leaves them out and logs that once.
 
 The example rules alert as "Tailscale key expires soon" 14 days ahead, and
 as "Tailscale down" after 10 minutes offline. Renew a key on the host with
-`tailscale up --force-reauth` while it is still reachable.
+`tailscale up --force-reauth` while it is still reachable. "Tailnet Lock
+off" and "Node not signed for Tailnet Lock" alert after 10 minutes; sign a
+node with `tailscale lock sign <node key>` from a signing node
+(docs/adr/0028-tailnet-lock-decides-which-nodes-join.md).
 
 Every server has key expiry disabled, a step of joining it to the
 tailnet (DIRECTION.md). In the Tailscale admin console, open Machines, the
@@ -638,7 +652,8 @@ turns the example's Grafana rules into Prometheus rules, parses every
 query with promtool and tests the vulnerability and Tailscale rules in
 it. The `tailscale-metrics` check runs the Tailscale metrics script
 against nixpkgs' tailscaled, logged out, and against its status with a
-key expiry, with none, and with an expired key.
+key expiry, with none, and with an expired key, and its Tailnet Lock
+status with the lock on, signed and unsigned, off, and missing.
 The `tailscale-ssh-off` check holds the example server to
 docs/adr/0026-servers-ssh-through-sshd-only.md: no `--ssh`, the
 `tailscale-ssh-off` unit, and a failed build without sshd on the tailnet,
