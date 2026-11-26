@@ -301,6 +301,31 @@ tests:
               name: example.service
               state: failed
 
+  # A Proxmox node that stops pushing at 60 minutes alerts once 15 minutes
+  # pass without a sample; one still pushing does not, and neither does
+  # one silent for over 7 days.
+  - interval: 1m
+    input_series:
+      - series: 'proxmox_node_uptime_seconds{job="proxmox-ve", node="pve1", proxmox_cluster="single-node", proxmox_node="pve1"}'
+        values: '0+60x60'
+      - series: 'proxmox_node_uptime_seconds{job="proxmox-ve", node="pve2", proxmox_cluster="single-node", proxmox_node="pve2"}'
+        values: '0+60x200'
+    alert_rule_test:
+      - eval_time: 74m
+        alertname: homelab-proxmox-metrics-stale
+        exp_alerts: []
+      - eval_time: 76m
+        alertname: homelab-proxmox-metrics-stale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: proxmox-ve
+              node: pve1
+              proxmox_cluster: single-node
+              proxmox_node: pve1
+      - eval_time: 8d
+        alertname: homelab-proxmox-metrics-stale
+        exp_alerts: []
   # OPNsense: router1's node_exporter is unreachable and alerts after 10
   # minutes; router2 answers but its API refuses the exporter, and alerts
   # too. router3 is fine on both, and router4 was down for 5 minutes only.

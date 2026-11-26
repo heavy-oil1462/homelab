@@ -94,3 +94,5 @@ never reaches the workers.
   decides which nodes join (Accepted)
 - [ADR-0029](0029-network-gear-scraped-through-exporters.md): Network
   gear is scraped through exporters on the observability host (Accepted)
+- [ADR-0030](0030-proxmox-pushes-opentelemetry-into-prometheus.md):
+  Proxmox pushes OpenTelemetry into Prometheus (Accepted)

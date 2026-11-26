@@ -170,6 +170,15 @@ let
     if cfg.grafanaProxyAuth.enable
     then { user = "Remote-User"; role = "Remote-Role"; }
     else { user = "X-Grafana-Git-Sync-User"; role = "X-Grafana-Git-Sync-Role"; };
+
+  # OTLP pushes, from Proxmox VE among others
+  # (docs/adr/0030-proxmox-pushes-opentelemetry-into-prometheus.md). The
+  # host's socket takes connections from allowedSources and hands them to
+  # Caddy on the same port, which passes POST /v1/metrics on to
+  # Prometheus and nothing else (containers/reverse-proxy.nix).
+  otlp = cfg.otlpReceiver;
+  otlpFrom4 = lib.filter (n: !lib.hasInfix ":" n) otlp.allowedSources;
+  otlpFrom6 = lib.filter (lib.hasInfix ":") otlp.allowedSources;
 in
 {
   imports = [
@@ -186,6 +195,16 @@ in
     {
       assertion = !(cfg.grafanaProxyAuth.enable && oidc.enable);
       message = "homelab.observability.grafanaProxyAuth and homelab.observability.grafanaOidc are both enabled; Grafana signs in with one or the other.";
+    }
+  ] ++ lib.optionals otlp.enable [
+    {
+      assertion = otlp.allowedSources != [ ]
+        && lib.all (n: !(lib.hasSuffix "/0" n)) otlp.allowedSources;
+      message = "homelab.observability.otlpReceiver needs allowedSources, the addresses that push to it, with no network of prefix length 0.";
+    }
+    {
+      assertion = config.virtualisation.oci-containers.containers ? caddy && proxyAddress != null;
+      message = "homelab.observability.otlpReceiver passes pushes through Caddy at homelab.reverseProxy.address: import the reverse-proxy module on this host and keep the address set.";
     }
   ] ++ lib.optionals oidc.enable [
     {
@@ -330,12 +349,72 @@ in
     config.services.prometheus.exporters.blackbox.port
   ];
 
+  # The OTLP endpoint. A port podman publishes is DNATed to the container
+  # before the firewall's INPUT chain sees it, so a source rule could not
+  # hold it to allowedSources. The host itself listens instead, behind
+  # the rules below, and systemd-socket-proxyd passes each connection on
+  # to Caddy's fixed address. Caddy is the one place that lets only the
+  # OTLP path through; Prometheus is published nowhere.
+  systemd.sockets.otlp-receiver = lib.mkIf otlp.enable {
+    description = "OTLP/HTTP metrics for Prometheus, through Caddy";
+    wantedBy = [ "sockets.target" ];
+    listenStreams = [ (toString otlp.port) ];
+  };
+  systemd.services.otlp-receiver = lib.mkIf otlp.enable {
+    description = "Pass OTLP/HTTP connections on to Caddy";
+    requires = [ "otlp-receiver.socket" ];
+    after = [ "otlp-receiver.socket" ];
+    serviceConfig = {
+      ExecStart = utils.escapeSystemdExecArgs [
+        "${config.systemd.package}/lib/systemd/systemd-socket-proxyd"
+        "${proxyAddress}:${toString otlp.port}"
+      ];
+      DynamicUser = true;
+      PrivateTmp = true;
+      PrivateDevices = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      ProtectKernelTunables = true;
+      ProtectKernelModules = true;
+      ProtectControlGroups = true;
+      CapabilityBoundingSet = "";
+      NoNewPrivileges = true;
+      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+    };
+  };
+
+  # One rule per source, in the firewall's own chain, as for break-glass
+  # SSH (modules/firewall.nix): the firewall's start, reload and stop
+  # remove them.
+  networking.firewall.extraCommands = lib.mkIf (otlp.enable && !config.networking.nftables.enable)
+    (lib.concatMapStrings
+      (n: "iptables -A nixos-fw -p tcp --dport ${toString otlp.port} -s ${n} -j nixos-fw-accept\n")
+      otlpFrom4
+    + lib.concatMapStrings
+      (n: "ip6tables -A nixos-fw -p tcp --dport ${toString otlp.port} -s ${n} -j nixos-fw-accept\n")
+      otlpFrom6);
+
+  networking.firewall.extraInputRules = lib.mkIf (otlp.enable && config.networking.nftables.enable)
+    (lib.optionalString (otlpFrom4 != [ ]) ''
+      ip saddr { ${lib.concatStringsSep ", " otlpFrom4} } tcp dport ${toString otlp.port} accept
+    ''
+    + lib.optionalString (otlpFrom6 != [ ]) ''
+      ip6 saddr { ${lib.concatStringsSep ", " otlpFrom6} } tcp dport ${toString otlp.port} accept
+    '');
+
   virtualisation.oci-containers.containers = {
     prometheus = {
       image = "docker.io/prom/prometheus@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06"; # 3.16.0, :latest as of 2026-11-18
       user = "${toString config.users.users.prometheus.uid}:${toString config.users.groups.prometheus.gid}";
       autoStart = true;
       extraOptions = hardening;
+      # The image's own command, and with otlpReceiver the receiver at
+      # /api/v1/otlp/v1/metrics, which only Caddy reaches from outside the
+      # podman network.
+      cmd = [
+        "--config.file=/etc/prometheus/prometheus.yml"
+        "--storage.tsdb.path=/prometheus"
+      ] ++ lib.optional otlp.enable "--web.enable-otlp-receiver";
       volumes = [
         "${prometheusConfig}:/etc/prometheus/prometheus.yml:ro"
         "prometheus-data:/prometheus:U"

@@ -164,6 +164,12 @@
       # The NVIDIA GPU exporters of hosts with
       # homelab.observabilityAgent.nvidiaGpu.enable, by tailnet address.
       nvidiaGpuTargets = [ "192.0.2.20:9835" ];
+      # Proxmox VE pushes its metrics here over OTLP/HTTP, from its LAN
+      # address only (docs/proxmox.md).
+      otlpReceiver = {
+        enable = true;
+        allowedSources = [ "192.0.2.30" ];
+      };
       # The router and the UniFi controller, through exporters on this host
       # (docs/opnsense.md, docs/unifi.md). Their credentials are
       # /var/lib/secrets/opnsense-exporter.env and

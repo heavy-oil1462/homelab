@@ -811,6 +811,46 @@ in
           nvidia-gpu job in prometheus.yml points at it.
         '';
       };
+      otlpReceiver = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Take OpenTelemetry metrics pushed over OTLP/HTTP, such as
+            Proxmox VE 9's OpenTelemetry metric server sends, into
+            Prometheus. Prometheus runs with --web.enable-otlp-receiver,
+            and the host listens on port for POST /v1/metrics, open in the
+            firewall to allowedSources only. A systemd socket hands each
+            connection to Caddy, which passes that one path on to
+            Prometheus's /api/v1/otlp/v1/metrics and answers everything
+            else with 404, so no other endpoint of Prometheus is reachable
+            (docs/adr/0030-proxmox-pushes-opentelemetry-into-prometheus.md,
+            docs/proxmox.md). Needs the reverse-proxy module on the same
+            host. How metric names and resource attributes are translated
+            is set in prometheus.yml's otlp block; the example has it.
+          '';
+        };
+        port = lib.mkOption {
+          type = lib.types.port;
+          default = 4318;
+          description = ''
+            Port the host takes OTLP/HTTP on, plain HTTP, on every
+            interface. 4318 is OTLP/HTTP's own port; Proxmox's default
+            for plain HTTP is 4317, so it is given explicitly there.
+          '';
+        };
+        allowedSources = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          example = [ "192.0.2.30" "2001:db8::30/128" ];
+          description = ''
+            IPv4 and IPv6 addresses or CIDRs that may reach port, such as
+            the Proxmox host's LAN address. Nothing else reaches it, on the
+            LAN or the tailnet. Must not be empty with enable, nor have a
+            network with prefix length 0.
+          '';
+        };
+      };
       # Network gear Prometheus scrapes through exporters on this host
       # (docs/adr/0029-network-gear-scraped-through-exporters.md). Their
       # jobs are in /etc/prometheus/scrape-configs.yml, which prometheus.yml

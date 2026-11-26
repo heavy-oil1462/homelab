@@ -98,7 +98,8 @@ Services (OCI containers, pinned by digest):
   certificates that expire within 14 days, sites that are down or serve
   an invalid certificate, Tailscale keys about to expire, Tailscale down,
   Tailnet Lock turned off and nodes it does not trust, an OPNsense router
-  or UniFi controller that cannot be reached, through one
+  or UniFi controller that cannot be reached, Proxmox nodes whose metrics
+  stopped, through one
   placeholder contact point.
   `homelab.observability.scrape.opnsense` and `.unifi` scrape network
   gear through exporters on the observability host: the router's
@@ -112,7 +113,14 @@ Services (OCI containers, pinned by digest):
   example dashboard `gpu.json` shows GPU load per instance from the NVIDIA
   GPU exporters listed in `homelab.observability.nvidiaGpuTargets`, which
   Prometheus reads from `/etc/prometheus/nvidia-gpu-targets.json` through
-  the example's nvidia-gpu job. Grafana
+  the example's nvidia-gpu job. With
+  `homelab.observability.otlpReceiver.enable`, Prometheus takes
+  OpenTelemetry pushes, Proxmox VE 9's metric server among them, on port
+  4318 of the host, from the addresses in `allowedSources` only; Caddy
+  passes `POST /v1/metrics` to Prometheus's OTLP receiver and nothing else
+  of Prometheus. An alert catches a Proxmox node that stopped pushing
+  (docs/adr/0030-proxmox-pushes-opentelemetry-into-prometheus.md,
+  [docs/proxmox.md](docs/proxmox.md)). Grafana
   gives anyone who reaches it anonymous Admin access, unless
   `homelab.observability.grafanaProxyAuth.enable` is set: then only the
   tailnet logins in `homelab.observability.grafanaProxyAuth.admins` sign in,
