@@ -24,19 +24,23 @@ repositories with `git fsck` after a restore, as below. The monthly
 restore test (below) does both checks on every job's latest snapshot.
 
 Retention is 7 daily, 4 weekly, 6 monthly and 1 yearly snapshot per job.
+After its backup each run forgets its own snapshots, those tagged with the
+job's name (`restic forget --tag <job>`), and prunes nothing; the data they
+leave is removed once a night by the `restic-prune` unit (below).
 
 ## Freshness metric
 
 A failed run leaves a failed unit, but a job that does not run at all (its
 timer stopped or removed, the host down at the run time) fails nothing. So
-after every successful run, that is when the backup and the pruning both
-succeeded, the job writes two metrics for the node exporter's textfile
+after every successful run, that is when the backup and the job's own
+forget both succeeded, the job writes two metrics for the node exporter's textfile
 collector (`modules/observability-agent.nix`), into
 `homelab.observabilityAgent.textfileDirectory`
 (`/var/lib/prometheus-node-exporter/textfile`):
 
 - `homelab_backup_last_success_timestamp_seconds{backup_job="<job>"}`: the
-  Unix time the run finished.
+  Unix time the run finished. It says nothing about the prune, which has
+  its own metrics.
 - `homelab_backup_last_success_size_bytes{backup_job="<job>"}`: the size of
   the files the run backed up, from the summary restic keeps in the
   snapshot. It is left out when restic cannot list the snapshot right after
@@ -119,6 +123,61 @@ against the repository (`sudo restic-vaultwarden repair index`). A site's
 own config may wrap the steps in one script, such as homelab-config's
 `scripts/setup/restic-repair.sh`, which the example rule's summary names.
 After the repair, run `systemctl start restic-check` so the alert clears.
+
+## Prune
+
+Each job only forgets snapshots, which removes the snapshot files but
+leaves their data in the repository. The `restic-prune` unit removes the
+data no snapshot needs any more, for every job at once, with `restic
+prune`, every night at 02:00, after the jobs' default midnight run, and at
+the next boot when the host was down then (ADR-0031). Before, every job ran
+`forget --prune` over the whole repository: five prunes a night, each
+rewriting and deleting packs on the remote, where an interrupted or retried
+upload or delete can leave a hole. One prune a night is one such chance.
+
+It first removes stale locks, those of restic processes that died, as the
+jobs did before their prune. It uses the jobs' password, rclone
+credentials and lock-waiting restic: the prune locks the repository
+exclusively, so it waits for a running job, and a job started meanwhile
+waits for it. Change its time with `homelab.backups.prune.schedule`, best
+after the jobs' schedules.
+
+The prune keeps restic's default `--max-unused 5%`: packs that are partly
+in use are repacked only when unused data passes 5% of the repository.
+A lower limit frees a little more space at the cost of more packs rewritten
+on the remote each night, which is the risk the single prune is there to
+reduce.
+
+Each run writes `homelab_restic_prune.prom` into the textfile directory,
+also when the prune fails:
+
+- `homelab_backup_prune_last_run_timestamp_seconds`: when it last ran.
+- `homelab_backup_prune_last_success_timestamp_seconds`: when it last
+  succeeded. A failed prune keeps the earlier value; it is missing until
+  the first prune succeeds.
+- `homelab_backup_prune_ok`: 1 when the last prune succeeded, 0 when it
+  failed.
+
+A failed prune also leaves the `restic-prune` unit failed. The example's
+"Backup prune failed or stale" rule alerts, as critical, when the last
+prune failed or when none has succeeded in 2 days; the generic "Failed
+systemd unit" rule leaves the unit out. A host whose prune has never run
+has no metrics and does not alert.
+
+To run it by hand and read the result:
+
+```sh
+systemctl start restic-prune
+journalctl -u restic-prune -n 50
+cat /var/lib/prometheus-node-exporter/textfile/homelab_restic_prune.prom
+```
+
+A prune is the first to read the whole index against the packs, so a
+missing pack often shows here first, as
+`The index references 1 needed pack files which are missing from the
+repository`. Repair the repository as under "Repository check", then run
+`systemctl start restic-prune` so the alert clears. The jobs keep backing
+up while the prune fails; the repository only grows.
 
 ## Restore test
 
@@ -226,7 +285,8 @@ restic snapshots
 ```
 
 The wrappers wait up to 12 hours for the repository lock (`--retry-lock`), so
-a command started while a job prunes waits for it instead of failing.
+a command started while a job forgets or the prune runs waits for it
+instead of failing.
 
 ## Restore one job
 

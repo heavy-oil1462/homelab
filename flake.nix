@@ -215,6 +215,13 @@
             modules = [{ homelab.backups.check.enable = false; }];
           }).config;
         };
+        # The jobs' own forget and the restic-prune script against a local
+        # restic repository, and the example server's units and timer for
+        # them: each job forgets only its own snapshots, and only
+        # restic-prune removes data.
+        backup-prune = pkgs.callPackage ./tests/backup-prune.nix {
+          config = exampleServer.config;
+        };
         # The restic-restore-test script against a local restic repository
         # with a SQLite job and a git job, sound and damaged, and the example
         # server's unit, config and timer for it, and with the test off.

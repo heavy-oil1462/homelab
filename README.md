@@ -91,6 +91,7 @@ Services (OCI containers, pinned by digest):
   record for the domain). `examples/assets/grafana-alerting.yaml` alerts on
   failed units, failed backups, backups with no success in 36 hours or
   none at all, a backup repository whose weekly check failed or is overdue,
+  a nightly prune that failed or is stale,
   a backup job whose monthly restore test failed or is overdue,
   containers with a fixable critical or high vulnerability
   for a day and images not scanned in 3 days (the `vulnerability-scan`
@@ -266,9 +267,10 @@ System:
   touch, for every host; `homelab.forgejo.trustDeployCa` lets the same
   certificate reach Forgejo), `acme` (Cloudflare DNS-01), `backups` (restic to any
   rclone remote: Vaultwarden, plus the jobs in `homelab.backups.jobs`, with
-  consistent SQLite snapshots, each job's last successful run as a
-  node exporter metric, a weekly `restic check` of the repository with
-  its result as one too, and a monthly restore test of every job, with
+  consistent SQLite snapshots, each job forgetting only its own snapshots,
+  each job's last successful run as a node exporter metric, one nightly
+  `restic prune` of the shared repository and a weekly `restic check` of
+  it, with their results as metrics too, and a monthly restore test of every job, with
   `restic restore --verify`, SQLite's integrity check and `git fsck`, and a
   result per job; restoring is in [docs/backups.md](docs/backups.md)),
   `locale`, `yubikey` (pam_u2f with a

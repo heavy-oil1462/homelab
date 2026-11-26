@@ -24,6 +24,14 @@
 # from one that does not exist. The label is backup_job, not job, which
 # Prometheus sets to the scrape job's name.
 #
+# A job forgets only its own snapshots (forget --tag <name>) and does not
+# prune. The restic-prune unit prunes the shared repository once a night,
+# after the jobs, and writes
+#   homelab_backup_prune_last_run_timestamp_seconds
+#   homelab_backup_prune_last_success_timestamp_seconds
+#   homelab_backup_prune_ok
+# like the check below (docs/adr/0031-one-prune-a-night-for-the-shared-repository.md).
+#
 # A damaged repository (a missing pack, say) does not stop the jobs: backup
 # still saves snapshots, and only a prune, a restore or a check notices. So
 # the restic-check unit checks the repository weekly
@@ -53,8 +61,8 @@ let
   cfg = config.homelab.backups;
 
   # All jobs share the repository, and restic refuses to start while another
-  # process holds a conflicting lock: forget --prune takes an exclusive lock,
-  # so a job that starts while another prunes would fail. Rather than
+  # process holds a conflicting lock: forget and prune take an exclusive
+  # lock, so a job that starts while another forgets would fail. Rather than
   # spreading the schedules (Persistent catch-up after a downtime starts every
   # missed job at boot anyway), every restic command waits up to 12 hours for
   # the lock with the global --retry-lock flag (restic 0.16 and later). The
@@ -71,6 +79,8 @@ let
 
   checkScript = pkgs.callPackage ./backup-check-script.nix { };
   checkMetrics = "${textfileDir}/homelab_restic_check.prom";
+
+  pruneScript = pkgs.callPackage ./backup-prune-script.nix { };
 
   restoreTestScript = pkgs.callPackage ./backup-restore-test-script.nix { };
   restoreTestMetrics = "${textfileDir}/homelab_restore_test.prom";
@@ -111,8 +121,25 @@ let
     homelab_backup_job_info{backup_job="${label name}"} 1
   '') (lib.attrNames jobs));
 
+  # Retention, per job.
+  keepOpts = [
+    "--keep-daily 7"
+    "--keep-weekly 4"
+    "--keep-monthly 6"
+    "--keep-yearly 1"
+  ];
+
+  # The job's own forget, after its backup in the unit's ExecStart. The
+  # NixOS module runs its pruneOpts only as forget --prune over every
+  # snapshot, so they stay empty and the job forgets here: only snapshots
+  # tagged with its name, grouped by host and paths as restic does by
+  # default, and without --prune. That leaves the data in the repository
+  # until restic-prune removes it.
+  forgetCmd = name: "${resticWaiting}/bin/restic forget --tag ${name} "
+    + lib.concatStringsSep " " keepOpts;
+
   # ExecStartPost of the job's unit: systemd runs it only when every
-  # ExecStart command (backup, forget --prune) succeeded. The size is the
+  # ExecStart command (backup, its own forget) succeeded. The size is the
   # summary restic stored in the new snapshot (the bytes of the files it
   # read); looking it up reads snapshot files restic has just cached, and
   # if that fails or takes over 5 minutes the timestamp is written without
@@ -129,7 +156,7 @@ let
       || true)
     case "$size" in *[!0-9]* | "") size= ;; esac
     {
-      echo '# HELP homelab_backup_last_success_timestamp_seconds When the backup job last succeeded.'
+      echo '# HELP homelab_backup_last_success_timestamp_seconds When the backup job last succeeded: its backup and its own forget, not the nightly prune.'
       echo '# TYPE homelab_backup_last_success_timestamp_seconds gauge'
       echo ${lib.escapeShellArg ''homelab_backup_last_success_timestamp_seconds{backup_job="${label name}"}''} "$now"
       if [ -n "$size" ]; then
@@ -177,8 +204,8 @@ let
       (db: map (suffix: db + suffix) [ "" "-wal" "-shm" "-journal" ])
       job.sqliteDatabases;
 
-    # The tag lets the runbook pick one job's snapshots. forget groups by
-    # host and paths, so jobs never prune each other's snapshots.
+    # The tag lets the runbook pick one job's snapshots, and the job's
+    # forget take only its own.
     extraBackupArgs = [ "--tag ${name}" ];
 
     # Online backup of each live database into the staging dir. The sqlite
@@ -200,12 +227,8 @@ let
       rm -rf ${staging name}
     '';
 
-    pruneOpts = [
-      "--keep-daily 7"
-      "--keep-weekly 4"
-      "--keep-monthly 6"
-      "--keep-yearly 1"
-    ];
+    # No forget --prune from the NixOS module; see forgetCmd.
+    pruneOpts = [ ];
   };
 in
 {
@@ -252,8 +275,42 @@ in
 
   systemd.services = lib.mkMerge [
     (lib.mapAttrs'
-      (name: _: lib.nameValuePair "restic-backups-${name}" { postStart = recordSuccess name; })
+      (name: _: lib.nameValuePair "restic-backups-${name}" {
+        serviceConfig.ExecStart = lib.mkAfter [ (forgetCmd name) ];
+        postStart = recordSuccess name;
+      })
       jobs)
+
+    # The nightly prune of the shared repository, after the jobs have
+    # forgotten their old snapshots, with their credentials and their
+    # restic, which waits for the lock: prune locks the repository
+    # exclusively, so it waits for a running job, and a job started
+    # meanwhile waits for it. One prune a night instead of one per job
+    # keeps the rewriting and deleting of packs on the remote to once
+    # (docs/adr/0031-one-prune-a-night-for-the-shared-repository.md).
+    {
+      restic-prune = {
+        description = "Prune the restic backup repository";
+        wants = [ "network-online.target" ];
+        after = [ "network-online.target" ];
+        path = [ resticWaiting ];
+        environment = {
+          RESTIC_REPOSITORY = cfg.resticRepo;
+          RESTIC_PASSWORD_FILE = passwordFile;
+          RESTIC_CACHE_DIR = "/var/cache/restic-prune";
+        };
+        # A rebuild does not start a prune, nor stop one that runs.
+        restartIfChanged = false;
+        serviceConfig = {
+          Type = "oneshot";
+          EnvironmentFile = environmentFile;
+          ExecStart = "${pruneScript}/bin/restic-prune ${lib.escapeShellArg textfileDir}";
+          PrivateTmp = true;
+          CacheDirectory = "restic-prune";
+          CacheDirectoryMode = "0700";
+        };
+      };
+    }
 
     # The weekly check of the repository, with the jobs' credentials and
     # their restic, which waits for the lock: restic check locks the
@@ -314,6 +371,15 @@ in
       };
     })
   ];
+
+  # Nightly, caught up at the next boot.
+  systemd.timers.restic-prune = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = cfg.prune.schedule;
+      Persistent = true;
+    };
+  };
 
   # Spread over an hour; Persistent runs a check missed while the host was
   # down at the next boot.
