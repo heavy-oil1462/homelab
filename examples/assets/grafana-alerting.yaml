@@ -525,6 +525,81 @@ groups:
             Check it on the host with: tailscale status and
             journalctl -u tailscaled -u tailscale-metrics
 
+      # Tailnet Lock is off on a host that has seen it on
+      # (docs/adr/0028-tailnet-lock-decides-which-nodes-join.md): someone
+      # used a disablement secret, and any node the control plane adds can
+      # join again. modules/tailscale.nix writes the series only once the
+      # host has seen the lock on, so a tailnet without it has no alert.
+      - uid: homelab-tailnet-lock-off
+        title: Tailnet Lock off
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                homelab_tailscale_lock_enabled
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tailnet Lock is off, as {{ $labels.instance }} sees it"
+          description: >-
+            Nobody should turn it off but the owner, with a disablement
+            secret from the recovery card. Check tailscale lock status and
+            tailscale lock log on a signing node, then the Tailscale admin
+            console for nodes nobody added.
+
+      # The lock is on and does not trust this host's node key: a new or
+      # re-keyed node nobody signed yet, or one whose signature was
+      # revoked. Its peers drop its traffic, so it is off the tailnet in
+      # all but name. Only written while the lock is on.
+      - uid: homelab-tailnet-lock-node-not-signed
+        title: Node not signed for Tailnet Lock
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |-
+                homelab_tailscale_lock_node_signed
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} is not signed for Tailnet Lock: run tailscale lock sign from a signing node (homelab-config docs/tailnet-lock.md)"
+          description: >-
+            On a signing node, find the node key in tailscale lock status
+            under the locked-out nodes and sign it with tailscale lock sign
+            <node key>. If nobody added this node, remove it in the
+            Tailscale admin console instead.
+
       # A probed site that does not answer 2xx over valid TLS: Caddy or the
       # service behind it is down, the name does not resolve from the
       # observability host, or the certificate is expired or untrusted.
