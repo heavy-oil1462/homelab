@@ -335,6 +335,25 @@ in
       });
     };
 
+    backups.prune.schedule = lib.mkOption {
+      type = lib.types.str;
+      default = "*-*-* 02:00:00";
+      example = "*-*-* 05:30:00";
+      description = ''
+        When the restic-prune unit prunes homelab.backups.resticRepo, as a
+        systemd OnCalendar value. The jobs only forget their own snapshots;
+        this one prune a night removes the data no snapshot needs any more,
+        and writes homelab_backup_prune_ok and the times of the last run
+        and the last success to the node exporter's textfile collector,
+        which the example's "Backup prune failed or stale" rule alerts on.
+        Missed runs are caught up after boot (Persistent). Best after the
+        jobs' schedules (daily is midnight); the prune and the jobs wait
+        for each other's lock either way. The example alert expects a
+        success at least every 2 days
+        (docs/adr/0031-one-prune-a-night-for-the-shared-repository.md).
+      '';
+    };
+
     backups.check = {
       enable = lib.mkOption {
         type = lib.types.bool;
