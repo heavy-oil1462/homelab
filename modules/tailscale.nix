@@ -12,9 +12,11 @@
 #
 # The same goes for a node key that expires: the host drops off the tailnet
 # and SSH with it. On a host with the observability agent, the
-# tailscale-metrics unit writes the key's expiry and whether the node is
-# online for the node exporter's textfile collector
-# (modules/tailscale-metrics.sh), so a rule can alert weeks ahead.
+# tailscale-metrics unit writes the key's expiry, whether the node is
+# online and its Tailnet Lock state for the node exporter's textfile
+# collector (modules/tailscale-metrics.sh), so a rule can alert weeks ahead,
+# and when the lock goes off or stops trusting the node
+# (docs/adr/0028-tailnet-lock-decides-which-nodes-join.md).
 #
 # Servers do not run Tailscale SSH (homelab.tailscale.ssh): sshd with the
 # owner's keys and the deploy CA is their one SSH gate
@@ -118,15 +120,17 @@ in
 
     (lib.mkIf config.services.prometheus.exporters.node.enable {
       systemd.services.tailscale-metrics = {
-        description = "Write the Tailscale key expiry and state for the node exporter";
+        description = "Write the Tailscale key expiry, state and Tailnet Lock for the node exporter";
         after = [ "tailscaled.service" ];
         path = [ config.services.tailscale.package ];
         serviceConfig = {
           Type = "oneshot";
-          ExecStart = "${metrics}/bin/tailscale-metrics ${lib.escapeShellArg textfileDir}";
+          ExecStart = "${metrics}/bin/tailscale-metrics ${lib.escapeShellArg textfileDir} /var/lib/tailscale-metrics";
           # Root only to write into the textfile directory; it reads
-          # tailscaled's status over its socket and nothing else.
+          # tailscaled's status over its socket and nothing else. The state
+          # directory remembers whether the lock was ever on.
           ReadWritePaths = [ textfileDir ];
+          StateDirectory = "tailscale-metrics";
         } // hardening;
       };
 
