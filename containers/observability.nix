@@ -428,7 +428,7 @@ in
     };
 
     loki = {
-      image = "docker.io/grafana/loki@sha256:b43c257ccfc925d4a50b8717cac61a3b51df8c48d01847936057e5c4075a24a7"; # 3.7.10, :latest as of 2026-11-18
+      image = "docker.io/grafana/loki@sha256:4c86f2ad5003304c8da84d29da2279b04eb999d716f8089c88e4fa4a44b0781e"; # 3.7.11, :latest as of 2026-11-27
       user = "${toString config.users.users.loki.uid}:${toString config.users.groups.loki.gid}";
       autoStart = true;
       extraOptions = hardening;

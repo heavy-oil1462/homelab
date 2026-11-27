@@ -110,7 +110,7 @@ in
     # tests/container-hardening.nix
     # (docs/adr/0014-containers-run-unprivileged.md).
     unifi = {
-      image = "lscr.io/linuxserver/unifi-network-application@sha256:053a608b25f578bb92b7b4f59e3835f6cc6dd0c7500c30b24ac0e27e1742ab20"; # 10.6.109, :latest as of 2026-11-18
+      image = "lscr.io/linuxserver/unifi-network-application@sha256:31d2bc6f7df15fd737d7995e3907bf24e106e8b55deae22ad7bdea183c9b2e8b"; # 10.6.109, :latest as of 2026-11-27
       autoStart = true;
       dependsOn = [ "unifi-db" ];
       extraOptions = [
