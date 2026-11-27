@@ -51,9 +51,17 @@ next report, rather than letting it sit.
 Owner direction (board, 2026-11-13): "It is quite unclear now for me if
 something is waiting for my approval. Can that be made more clear".
 
-- Anything that needs the owner's decision or action is a cue question,
-  never only a comment or a needs:owner tag, since cue shows questions to
-  the owner.
+- Anything that needs the owner's decision, action or eyes is a cue
+  question: a choice, a deploy step, or a screenshot or preview to look
+  at. Never only a board reply, a comment or a needs:owner tag, since cue
+  shows questions to the owner and nothing else as waiting. Once cue has
+  owner review requests (cue 01a21c1a, ADR-0050), a change set for the
+  owner to look at gets `request_owner_review` with a note on what to
+  look at, instead of a question.
+- A change set that passed review and its checks is approved, not held
+  for the owner's go, unless the owner asked to see it before it merges.
+  Show the owner how it looks after the merge and take changes as a
+  follow-up issue.
 - Every status report starts with a "Waiting for you" list: each item with
   what to do and where (cue question, podium setting, deploy), or
   "nothing".
@@ -99,3 +107,7 @@ something is waiting for my approval. Can that be made more clear".
     the issue's scope writes it Accepted and names it in the summary for
     the supervisor to confirm. The supervisor sends it back only if it
     disagrees with a decision.
+- 2026-11-27: the fyr Gantt and capability roadmap previews were posted
+  as board replies asking for a "go", and the change sets waited. The
+  owner found nothing waiting for them and asked twice. Previews are
+  questions or owner review requests, and a checked change set merges.
